@@ -203,7 +203,8 @@ def executor_command(argv):
 def executor_live_ci_command(argv):
     parser = argparse.ArgumentParser(prog="executor-live-ci")
     parser.parse_args(argv)
-    executor.live_ci()
+    from tests.live_executor import live_ci
+    live_ci()
     return 0
 
 

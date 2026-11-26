@@ -310,3 +310,72 @@ class WrapperTests(unittest.TestCase):
         with patch("pathlib.Path.read_text", return_value=json.dumps(bad)), contextlib.redirect_stderr(io.StringIO()) as output:
             self.assertEqual(main(["test", "executor"]), 1)
         self.assertIn("FAIL: test_wrong_expected", output.getvalue())
+
+    def test_live_explicit_dispatch(self):
+        from unittest.mock import patch
+        from app.cli import main
+        from . import live_executor
+        with patch.object(live_executor, "live_ci") as live:
+            self.assertEqual(main(["executor-live-ci"]), 0)
+            live.assert_called_once_with()
+
+    def test_live_excluded_from_unit_suites(self):
+        import contextlib
+        import io
+        from unittest.mock import patch
+        from app.cli import main, MODULES
+        from . import runner, live_executor
+        self.assertNotIn("live_executor", FILES)
+        self.assertNotIn("tests.live_executor", TARGETS)
+        self.assertFalse(any("live_ci" in functions for functions in TARGETS.values()))
+        # Avoid recursive execution of this wrapper test in the nested full suite.
+        with patch.object(live_executor, "live_ci", side_effect=AssertionError("live execution in unit suite")) as live, \
+                patch.object(runner, "self_suite", return_value=unittest.TestSuite()), \
+                contextlib.redirect_stderr(io.StringIO()) as output:
+            for name in (*MODULES, "all"):
+                with self.subTest(name=name):
+                    self.assertEqual(main(["test", name]), 0, output.getvalue())
+            live.assert_not_called()
+        data = {"version": 1, "target": "controller.executor", "cases": [
+            {"name": "live", "function": "live_ci", "args": [], "assert": {"op": "true"}}]}
+        with self.assertRaises(ValueError):
+            prepare(data, "controller.executor")
+
+    def test_live_rejects_wrong_context(self):
+        import os
+        from unittest.mock import patch
+        from . import live_executor
+        valid = {"GITHUB_REPOSITORY": "owner/repo", "GITHUB_ACTIONS": "true",
+                 "GITHUB_EVENT_NAME": "workflow_dispatch", "GITHUB_REF": "refs/heads/main"}
+        for changes in ({"GITHUB_ACTIONS": "false"}, {"GITHUB_EVENT_NAME": "pull_request"},
+                        {"GITHUB_EVENT_NAME": "issue_comment"}, {"GITHUB_REF": "refs/heads/topic"}):
+            with self.subTest(changes=changes), patch.dict(os.environ, dict(valid, **changes), clear=True), \
+                    patch.object(live_executor.subprocess, "run") as command, patch.object(live_executor, "api") as api:
+                with self.assertRaisesRegex(ValueError, "manual GitHub Actions run on main"):
+                    live_executor.live_ci()
+                command.assert_not_called()
+                api.assert_not_called()
+
+    def test_live_rejects_stale_checkout(self):
+        import os
+        import subprocess
+        from unittest.mock import patch
+        from . import live_executor
+        sha = "a" * 40
+        env = {"GITHUB_REPOSITORY": "owner/repo", "GITHUB_ACTIONS": "true",
+               "GITHUB_EVENT_NAME": "workflow_dispatch", "GITHUB_REF": "refs/heads/main",
+               "GITHUB_SHA": sha}
+        with patch.dict(os.environ, env, clear=True), \
+                patch.object(live_executor.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, "b" * 40)) as command, \
+                patch.object(live_executor, "api") as api:
+            with self.assertRaisesRegex(ValueError, "not current trusted main"):
+                live_executor.live_ci()
+            command.assert_called_once_with(["git", "rev-parse", "HEAD"], check=True, capture_output=True, text=True)
+            api.assert_not_called()
+        with patch.dict(os.environ, env, clear=True), \
+                patch.object(live_executor.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, sha)) as command, \
+                patch.object(live_executor, "api", return_value={"commit": {"sha": "b" * 40}}) as api:
+            with self.assertRaisesRegex(ValueError, "not current trusted main"):
+                live_executor.live_ci()
+            command.assert_called_once_with(["git", "rev-parse", "HEAD"], check=True, capture_output=True, text=True)
+            api.assert_called_once_with("repos/owner/repo/branches/main")
