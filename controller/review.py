@@ -2,8 +2,13 @@
 import os
 import json
 import subprocess
+import hashlib
+import io
+import stat
+import zipfile
+from urllib import request as http_request, error as http_error
 from datetime import datetime, timezone
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 import re
 import time
 from controller import operation
@@ -230,8 +235,8 @@ def execute(repo, identity, inputs):
 
 
 DELEGATION_MAX_AGE = 1800
-MAX_REVIEW_LOG = 1024 * 1024
-LOG_TIMESTAMP = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.]+Z ")
+MAX_REVIEW_JSON = 1024 * 1024
+MAX_REVIEW_ARCHIVE = MAX_REVIEW_JSON + 65536
 
 
 def timestamp(value):
@@ -255,27 +260,135 @@ def parse_execution(command, work):
     raise ValueError("Unsupported delegated execution command")
 
 
-def read_review_log(repo, job_id):
-    """Only the fixed GitHub job-log endpoint, no arbitrary URL or shell."""
-    if not REPO.fullmatch(repo) or type(job_id) is not int or job_id < 1:
-        raise ValueError("Invalid review log reference")
-    result = subprocess.run(["gh", "api", "--hostname", "github.com",
-                             f"repos/{repo}/actions/jobs/{job_id}/logs"],
-                            check=True, capture_output=True, timeout=20)
-    if len(result.stdout) > MAX_REVIEW_LOG:
-        raise ValueError("Review log exceeds limit")
-    lines = [LOG_TIMESTAMP.sub("", s) for s in result.stdout.decode("utf-8").splitlines()]
-    reports = []
-    for i, line in enumerate(lines):
-        if line != "{":
-            continue
-        end = next((j for j in range(i + 1, len(lines)) if lines[j] == "}"), None)
-        if end is None:
-            raise ValueError("Incomplete review JSON")
-        reports.append(json.loads("\n".join(lines[i:end + 1])))
-    if len(reports) != 1 or not isinstance(reports[0], dict):
-        raise ValueError("Missing or ambiguous review JSON")
-    return reports[0]
+class NoRedirect(http_request.HTTPRedirectHandler):
+    """Do not forward the GitHub token to an artifact storage endpoint."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+def download_review_archive(repo, artifact_id):
+    if not REPO.fullmatch(repo) or type(artifact_id) is not int or artifact_id < 1:
+        raise ValueError("Invalid review artifact reference")
+    token = os.environ.get("GH_TOKEN")
+    if not token:
+        raise ValueError("Review artifact download requires GH_TOKEN")
+    opener = http_request.build_opener(NoRedirect())
+    url = f"https://api.github.com/repos/{repo}/actions/artifacts/{artifact_id}/zip"
+    req = http_request.Request(url, headers={"Authorization": "Bearer " + token,
+                               "Accept": "application/vnd.github+json",
+                               "X-GitHub-Api-Version": "2022-11-28",
+                               "User-Agent": "work-controller"})
+    try:
+        with opener.open(req, timeout=20):
+            raise ValueError("Review artifact API did not return the expected redirect")
+    except http_error.HTTPError as exc:
+        code, location = exc.code, exc.headers.get("Location")
+        exc.close()
+        if code != 302:
+            raise ValueError(f"Review artifact API failed (HTTP {code})") from None
+    except (OSError, TimeoutError):
+        raise ValueError("Review artifact API transport failed") from None
+    try:
+        target = urlsplit(location or "")
+        host = target.hostname or ""
+        if (target.scheme != "https" or target.username or target.password or target.port not in (None, 443)
+                or not host.endswith((".blob.core.windows.net", ".actions.githubusercontent.com",
+                                      ".githubusercontent.com")) or target.fragment):
+            raise ValueError("Invalid review artifact storage redirect")
+    except ValueError:
+        raise ValueError("Invalid review artifact storage redirect") from None
+    # The signed storage URL comes from GitHub, not a comment or artifact.
+    # No Authorization header and no further redirects; never log the URL.
+    try:
+        with opener.open(http_request.Request(location, headers={"User-Agent": "work-controller"}),
+                         timeout=20) as response:
+            if response.status != 200:
+                raise ValueError("Unexpected review artifact storage response")
+            raw = response.read(MAX_REVIEW_ARCHIVE + 1)
+    except http_error.HTTPError as exc:
+        code = exc.code
+        exc.close()
+        raise ValueError(f"Review artifact storage failed (HTTP {code})") from None
+    except (OSError, TimeoutError):
+        raise ValueError("Review artifact storage transport failed") from None
+    if not raw or len(raw) > MAX_REVIEW_ARCHIVE:
+        raise ValueError("Review artifact archive size invalid")
+    return raw
+
+
+def unique_json_object(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("Duplicate review JSON key")
+        result[key] = value
+    return result
+
+
+def reject_json_constant(value):
+    raise ValueError("Invalid review JSON constant")
+
+
+def decode_review_archive(raw, expected_digest):
+    if not isinstance(raw, bytes) or not 0 < len(raw) <= MAX_REVIEW_ARCHIVE:
+        raise ValueError("Review artifact archive size invalid")
+    if "sha256:" + hashlib.sha256(raw).hexdigest() != expected_digest:
+        raise ValueError("Review artifact archive digest mismatch")
+    try:
+        with zipfile.ZipFile(io.BytesIO(raw)) as archive:
+            entries = archive.infolist()
+            if len(entries) != 1:
+                raise ValueError("Review artifact must contain exactly one file")
+            entry = entries[0]
+            mode = stat.S_IFMT(entry.external_attr >> 16)
+            if (entry.filename != "review.json" or entry.is_dir() or mode not in (0, stat.S_IFREG)
+                    or entry.flag_bits & 1 or not 0 < entry.file_size <= MAX_REVIEW_JSON):
+                raise ValueError("Invalid review artifact file layout or size")
+            with archive.open(entry) as handle:
+                content = handle.read(MAX_REVIEW_JSON + 1)
+            if len(content) != entry.file_size or len(content) > MAX_REVIEW_JSON:
+                raise ValueError("Review artifact file size mismatch")
+        report = json.loads(content.decode("utf-8"), object_pairs_hook=unique_json_object,
+                            parse_constant=reject_json_constant)
+    except (zipfile.BadZipFile, NotImplementedError, RuntimeError, OSError, UnicodeError,
+            json.JSONDecodeError, RecursionError):
+        raise ValueError("Malformed review artifact archive or JSON") from None
+    if not isinstance(report, dict):
+        raise ValueError("Review artifact JSON must be an object")
+    return report
+
+
+def read_review_artifact(repo, run):
+    """Select the exact successful preflight attempt's artifact, then verify its bytes."""
+    run_id, attempt = run["id"], run["run_attempt"]
+    if (not REPO.fullmatch(repo) or type(run_id) is not int or run_id < 1
+            or type(attempt) is not int or attempt < 1):
+        raise ValueError("Invalid review artifact run reference")
+    name = f"review-evidence-{run_id}-{attempt}"
+    try:
+        listing = api(f"repos/{repo}/actions/runs/{run_id}/artifacts?per_page=100")
+    except (subprocess.CalledProcessError, OSError, ValueError):
+        raise ValueError("Review artifact listing failed") from None
+    entries = listing.get("artifacts")
+    if not isinstance(entries, list) or listing.get("total_count") != len(entries) or len(entries) > 100:
+        raise ValueError("Incomplete review artifact listing")
+    matches = [item for item in entries if item.get("name") == name]
+    if len(matches) != 1:
+        raise ValueError("Missing or ambiguous review attempt artifact")
+    item = matches[0]
+    artifact_id, size, checksum = item.get("id"), item.get("size_in_bytes"), item.get("digest")
+    origin = item.get("workflow_run") or {}
+    if (type(artifact_id) is not int or artifact_id < 1 or type(size) is not int
+            or not 0 < size <= MAX_REVIEW_ARCHIVE or item.get("expired") is not False
+            or not isinstance(checksum, str) or not re.fullmatch(r"sha256:[0-9a-f]{64}", checksum)
+            or origin.get("id") != run_id or origin.get("head_sha") != run["head_sha"]
+            or origin.get("head_branch") != "main"
+            or origin.get("repository_id") != run["repository"]["id"]
+            or origin.get("head_repository_id") != run["head_repository"]["id"]
+            or timestamp(item["expires_at"]) <= datetime.now(timezone.utc)):
+        raise ValueError("Review artifact metadata invalid, expired or unrelated")
+    return decode_review_archive(download_review_archive(repo, artifact_id), checksum)
 
 
 def verified_reference(repo, identity, review_run, job_id, inputs, requested_at, owner):
@@ -302,7 +415,7 @@ def verified_reference(repo, identity, review_run, job_id, inputs, requested_at,
     now = datetime.now(timezone.utc)
     if not timestamp(run["created_at"]) <= done <= requested <= now or (now - done).total_seconds() > DELEGATION_MAX_AGE:
         raise ValueError("Verified review is expired or not earlier than execution")
-    report = read_review_log(repo, job_id)
+    report = read_review_artifact(repo, run)
     request = report["request"]
     snap = report["snapshot"]
     pr = number(inputs["pr"]) if inputs["action"] == "merge" else None
