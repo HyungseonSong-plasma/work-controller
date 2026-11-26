@@ -6,12 +6,17 @@ from pathlib import Path
 import unittest
 
 from validation import issue, pr, merge
-from controller import executor
+from controller import cleanup, executor
 from .scenarios import approval as approval_scenarios, completion as completion_scenarios, merge as merge_scenarios
 from .scenarios import controller as controller_scenarios, executor as executor_scenarios, operation as operation_scenarios
+from .scenarios import cleanup as cleanup_scenarios
 from .model import TestClass
 
 TARGETS = {
+    "controller.cleanup": {"branch_is_unchanged": cleanup.branch_is_unchanged,
+                           "run_is_disposable": cleanup.run_is_disposable,
+                           "associated": cleanup.associated,
+                           "references_evidence": cleanup.references_evidence},
     "validation.issue": {"validate": issue.validate, "work_type": issue.work_type},
     "validation.pr": {"errors": pr.errors, "work_number": pr.work_number,
                       "work_errors": pr.work_errors},
@@ -25,9 +30,10 @@ TARGETS = {
     "controller.operation": {"identity_case": operation_scenarios.identity_case},
 }
 FILES = {name: "validation." + name for name in ("issue", "pr", "approval", "completion", "merge")}
-FILES.update({"controller": "controller.decision_engine", "executor": "controller.executor",
+FILES.update({"cleanup": "controller.cleanup", "controller": "controller.decision_engine", "executor": "controller.executor",
               "operation": "controller.operation"})
 SCENARIOS = {
+    "cleanup": (cleanup_scenarios.CleanupTests, cleanup_scenarios.CleanupLifecycleTests),
     "approval": (approval_scenarios.ApprovalTests,),
     "completion": (completion_scenarios.CompletionTests,),
     "merge": (merge_scenarios.MergeTests,),
