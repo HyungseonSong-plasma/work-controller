@@ -338,6 +338,7 @@ class CommentRequestTests(unittest.TestCase):
     def test_merge_comment_wait_then_full_verifier(self):
         from controller import review
         from validation import merge
+        from validation.model import digest
         identity = self.identity()
         data = {"work": 4, "base": self.sha, "head": "b"*40}
         command = "/review merge verify 5 " + digest(data) + " " + data["head"]
