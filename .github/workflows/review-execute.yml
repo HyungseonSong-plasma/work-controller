@@ -1,5 +1,7 @@
 name: Review execute
 on:
+  issue_comment:
+    types: [created]
   workflow_dispatch:
     inputs:
       action:
@@ -28,12 +30,19 @@ on:
         type: string
         default: ''
 permissions: {}
-concurrency:
-  group: review-execute
-  cancel-in-progress: false
 jobs:
   merge:
-    if: github.ref == 'refs/heads/main' && inputs.action == 'merge'
+    concurrency:
+      group: review-execute
+      cancel-in-progress: false
+    env:
+      REVIEW_ACTION: merge
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      ((github.event_name == 'workflow_dispatch' && inputs.action == 'merge') ||
+       (github.event_name == 'issue_comment' && vars.AGENT_REVIEW_DELEGATION == 'v1' &&
+        !github.event.issue.pull_request && github.event.issue.state == 'open' &&
+        startsWith(github.event.comment.body, '/execute-review merge ')))
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -51,15 +60,27 @@ jobs:
       - name: Run trusted CLI
         env:
           GH_TOKEN: ${{ github.token }}
+          AGENT_REVIEW_DELEGATION: ${{ vars.AGENT_REVIEW_DELEGATION }}
         run: python3 -m app.cli review --repo "$GITHUB_REPOSITORY" --execute-request
   close:
-    if: github.ref == 'refs/heads/main' && inputs.action == 'close'
+    concurrency:
+      group: review-execute
+      cancel-in-progress: false
+    env:
+      REVIEW_ACTION: close
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      ((github.event_name == 'workflow_dispatch' && inputs.action == 'close') ||
+       (github.event_name == 'issue_comment' && vars.AGENT_REVIEW_DELEGATION == 'v1' &&
+        !github.event.issue.pull_request && github.event.issue.state == 'open' &&
+        startsWith(github.event.comment.body, '/execute-review close ')))
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: read
       issues: write
       pull-requests: read
+      actions: read
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
@@ -68,4 +89,5 @@ jobs:
       - name: Run trusted CLI
         env:
           GH_TOKEN: ${{ github.token }}
+          AGENT_REVIEW_DELEGATION: ${{ vars.AGENT_REVIEW_DELEGATION }}
         run: python3 -m app.cli review --repo "$GITHUB_REPOSITORY" --execute-request

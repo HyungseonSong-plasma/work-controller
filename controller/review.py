@@ -1,5 +1,9 @@
-"""Narrow Actions bridge for read-only review and owner manual execution."""
+"""Trusted review bridge: read-only verification, manual and opt-in execution."""
 import os
+import json
+import subprocess
+from datetime import datetime, timezone
+from urllib.parse import urlencode
 import re
 import time
 from controller import operation
@@ -225,7 +229,169 @@ def execute(repo, identity, inputs):
     raise ValueError("Unsupported execution action")
 
 
+DELEGATION_MAX_AGE = 1800
+MAX_REVIEW_LOG = 1024 * 1024
+LOG_TIMESTAMP = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.]+Z ")
+
+
+def timestamp(value):
+    if not isinstance(value, str) or not UTC_TIMESTAMP.fullmatch(value):
+        raise ValueError("Invalid review timestamp")
+    return datetime.fromisoformat(value.replace("Z", "+00:00"))
+
+
+def parse_execution(command, work):
+    """Exact, data-only request. The Work is taken from the Issue, never the text."""
+    if not isinstance(command, str) or len(command) > 1000:
+        raise ValueError("Invalid delegated execution command")
+    m = re.fullmatch(r"/execute-review merge ([1-9][0-9]*) ([1-9][0-9]*) ([1-9][0-9]*) ([0-9a-f]{64}) ([0-9a-f]{40})", command)
+    if m:
+        return number(m[1]), number(m[2]), {"action": "merge", "work": str(work), "pr": m[3],
+                                              "snapshot": m[4], "head": m[5], "evidence": ""}
+    m = re.fullmatch(r"/execute-review close ([1-9][0-9]*) ([1-9][0-9]*) ([0-9a-f]{64})\nEvidence: ([^\r\n]{1,500})", command)
+    if m and m[4].isprintable() and m[4].strip():
+        return number(m[1]), number(m[2]), {"action": "close", "work": str(work), "pr": "",
+                                              "snapshot": m[3], "head": "", "evidence": m[4]}
+    raise ValueError("Unsupported delegated execution command")
+
+
+def read_review_log(repo, job_id):
+    """Only the fixed GitHub job-log endpoint, no arbitrary URL or shell."""
+    if not REPO.fullmatch(repo) or type(job_id) is not int or job_id < 1:
+        raise ValueError("Invalid review log reference")
+    result = subprocess.run(["gh", "api", "--hostname", "github.com",
+                             f"repos/{repo}/actions/jobs/{job_id}/logs"],
+                            check=True, capture_output=True, timeout=20)
+    if len(result.stdout) > MAX_REVIEW_LOG:
+        raise ValueError("Review log exceeds limit")
+    lines = [LOG_TIMESTAMP.sub("", s) for s in result.stdout.decode("utf-8").splitlines()]
+    reports = []
+    for i, line in enumerate(lines):
+        if line != "{":
+            continue
+        end = next((j for j in range(i + 1, len(lines)) if lines[j] == "}"), None)
+        if end is None:
+            raise ValueError("Incomplete review JSON")
+        reports.append(json.loads("\n".join(lines[i:end + 1])))
+    if len(reports) != 1 or not isinstance(reports[0], dict):
+        raise ValueError("Missing or ambiguous review JSON")
+    return reports[0]
+
+
+def verified_reference(repo, identity, review_run, job_id, inputs, requested_at, owner):
+    """Require actual successful, current-base, exactly matched read-only evidence."""
+    root = f"repos/{repo}"
+    run = api(f"{root}/actions/runs/{review_run}")
+    if (run.get("id") != review_run or run.get("path") != ".github/workflows/review-preflight.yml"
+            or run.get("event") != "issue_comment" or run.get("head_sha") != identity["base"]
+            or run.get("head_branch") != "main" or run.get("status") != "completed"
+            or run.get("conclusion") != "success" or run["actor"]["login"].casefold() != owner
+            or type(run.get("run_attempt")) is not int or run["run_attempt"] < 1):
+        raise ValueError("Invalid verified review run")
+    jobs = api(f"{root}/actions/runs/{review_run}/jobs?per_page=100")
+    if jobs.get("total_count") != 1 or len(jobs.get("jobs", [])) != 1:
+        raise ValueError("Ambiguous review job list")
+    job = jobs["jobs"][0]
+    if (job.get("id") != job_id or job.get("run_id") != review_run
+            or job.get("run_attempt") != run["run_attempt"] or job.get("name") != "preflight"
+            or job.get("head_sha") != identity["base"] or job.get("status") != "completed"
+            or job.get("conclusion") != "success"):
+        raise ValueError("Invalid verified review job")
+    done = timestamp(job["completed_at"])
+    requested = timestamp(requested_at)
+    now = datetime.now(timezone.utc)
+    if not timestamp(run["created_at"]) <= done <= requested <= now or (now - done).total_seconds() > DELEGATION_MAX_AGE:
+        raise ValueError("Verified review is expired or not earlier than execution")
+    report = read_review_log(repo, job_id)
+    request = report["request"]
+    snap = report["snapshot"]
+    pr = number(inputs["pr"]) if inputs["action"] == "merge" else None
+    command = (f"/review merge verify {pr} {inputs['snapshot']} {inputs['head']}" if pr is not None
+               else f"/review completion verify {inputs['snapshot']}")
+    if (report.get("repository", "").casefold() != repo.casefold()
+            or report.get("state") != "VERIFIED" or report.get("mode") != "read-only"
+            or "execution" not in report or report["execution"] is not None or report.get("blockers") != []
+            or report.get("review_digest") != inputs["snapshot"] or digest(snap) != inputs["snapshot"]
+            or request.get("work") != identity["work"] or request.get("pr") != pr
+            or request.get("run") != review_run or request.get("attempt") != run["run_attempt"]
+            or request.get("base") != identity["base"] or request.get("command") != command
+            or type(request.get("comment")) is not int or not 0 < request["comment"] < identity["comment"]
+            or snap.get("repository") != repo.casefold() or snap.get("work") != identity["work"]
+            or (pr is not None and (snap.get("pr") != pr or snap.get("head") != inputs["head"]
+                                    or snap.get("base") != identity["base"]))
+            or (pr is None and snap.get("state") != "open")):
+        raise ValueError("Verified review evidence does not match execution")
+    original = api(f"{root}/issues/comments/{request['comment']}")
+    if (original.get("id") != request["comment"] or original.get("body") != command
+            or original["user"]["login"].casefold() != owner
+            or original.get("issue_url", "").casefold() != f"https://api.github.com/{root}/issues/{identity['work']}".casefold()
+            or original.get("created_at") != original.get("updated_at")
+            or not timestamp(original["created_at"]) <= timestamp(run["created_at"])):
+        raise ValueError("Verified review comment changed or is unrelated")
+    return job["completed_at"]
+
+
+def guard_prior_dispatches(repo, identity, completed_at):
+    """Conservative replay guard using existing Actions history, not an approval store.
+
+    Any earlier non-skipped execution run since verification consumes the slot,
+    even on a different Work. Missing, ambiguous, or deleted history is not
+    durable proof of uniqueness against privileged GitHub writers.
+    """
+    root = f"repos/{repo}"
+    query = urlencode({"created": ">=" + completed_at, "per_page": 100})
+    history = api(f"{root}/actions/workflows/review-execute.yml/runs?{query}")
+    runs = history.get("workflow_runs", [])
+    if history.get("total_count") != len(runs) or len(runs) > 100:
+        raise ValueError("Delegation history is incomplete")
+    current = [r for r in runs if r.get("id") == identity["run"]]
+    if len(current) != 1 or current[0].get("run_attempt") != 1:
+        raise ValueError("Current delegated run missing from history")
+    start = timestamp(current[0]["created_at"])
+    for run in runs:
+        if run["id"] == identity["run"] or timestamp(run["created_at"]) > start:
+            continue
+        if run.get("status") != "completed":
+            raise ValueError("Earlier or concurrent delegated run is unresolved; obtain fresh review")
+        jobs = api(f"{root}/actions/runs/{run['id']}/jobs?per_page=100")
+        entries = jobs.get("jobs", [])
+        if jobs.get("total_count") != len(entries) or not entries or any(
+                j.get("conclusion") != "skipped" for j in entries):
+            raise ValueError("An execution attempt followed the verified review; obtain fresh review")
+
+
+def delegated_request(repo):
+    if os.environ.get("AGENT_REVIEW_DELEGATION") != "v1":
+        raise ValueError("Agent review delegation is disabled")
+    event, sha, actor, run, attempt = operation.event_context(repo, "issue_comment")
+    if attempt != 1 or os.environ.get("GITHUB_TRIGGERING_ACTOR", "").casefold() != actor.casefold():
+        raise ValueError("Delegated execution requires initial owner-attributed request")
+    command = event["comment"]["body"]
+    review_run, job_id, inputs = parse_execution(command, event["issue"]["number"])
+    if os.environ.get("REVIEW_ACTION") != inputs["action"]:
+        raise ValueError("Execution job/action mismatch")
+    identity = operation.request_identity(repo, event, sha, actor, run, attempt, command=command)
+    owner = authority.read_policy(repo, sha)["owner"].casefold()
+    completed = verified_reference(repo, identity, review_run, job_id, inputs,
+                                   event["comment"]["created_at"], owner)
+    if inputs["action"] == "merge":
+        wait_merge_refresh(repo, identity, number(inputs["pr"]), inputs["snapshot"],
+                           inputs["head"], event["comment"]["created_at"])
+    if operation.request_identity(repo, event, sha, actor, run, attempt, command=command) != identity:
+        raise ValueError("Delegated request changed")
+    # Repeat evidence and replay checks after waiting, before the shared write path.
+    if verified_reference(repo, identity, review_run, job_id, inputs,
+                          event["comment"]["created_at"], owner) != completed:
+        raise ValueError("Verified reference changed")
+    guard_prior_dispatches(repo, identity, completed)
+    result = execute(repo, dict(identity, actor=actor, delegation="v1",
+                                review_run=review_run, review_job=job_id), inputs)
+    return result
+
+
 def execute_request(repo):
+    if os.environ.get("GITHUB_EVENT_NAME") == "issue_comment":
+        return delegated_request(repo)
     event, sha, actor, run, attempt = operation.event_context(repo, "workflow_dispatch")
     identity = manual_identity(repo, event, sha, actor, run, attempt)
     return execute(repo, identity, event["inputs"])
