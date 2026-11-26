@@ -9,7 +9,7 @@ from validation import issue, pr, merge, completion, authority, approval
 from validation.model import REPO, SHA, api, digest
 from validation.merge import read_snapshot, verify
 from validation.completion import read_assessment, approved_close, guard_closed
-from controller import decision_engine
+from controller import decision_engine, executor
 from controller.decision_engine import discover
 
 
@@ -180,9 +180,29 @@ def approval_command(argv):
     return int(not result["allowed"]) if args.pr is not None else 0
 
 
-COMMANDS = {"approval": approval_command, "authority": authority_command, "issue": issue_command, "pr": pr_command, "merge": merge_command,
+def executor_command(argv):
+    parser = argparse.ArgumentParser(prog="executor")
+    parser.add_argument("--repo", required=True)
+    parser.add_argument("--work", required=True, type=int)
+    parser.add_argument("--plan", required=True, help="JSON file containing title, body and files; - for stdin")
+    parser.add_argument("--execute", action="store_true")
+    parser.add_argument("--reviewed-plan", help="Digest returned by a reviewed dry-run")
+    args = parser.parse_args(argv)
+    if args.execute != bool(args.reviewed_plan):
+        parser.error("Execution requires --execute and --reviewed-plan; dry-run uses neither")
+    if args.plan == "-":
+        plan = json.load(sys.stdin)
+    else:
+        with open(args.plan, encoding="utf-8") as stream:
+            plan = json.load(stream)
+    result = executor.run(args.repo, args.work, plan, args.execute, args.reviewed_plan)
+    print(json.dumps(result, indent=2, ensure_ascii=False))
+    return int(result["state"] not in {"READY", "PUBLISHED"})
+
+
+COMMANDS = {"executor": executor_command, "approval": approval_command, "authority": authority_command, "issue": issue_command, "pr": pr_command, "merge": merge_command,
             "completion": completion_command, "controller": controller_command}
-MODULES = {"approval": approval, "authority": authority, "issue": issue, "pr": pr, "merge": merge, "completion": completion,
+MODULES = {"executor": executor, "approval": approval, "authority": authority, "issue": issue, "pr": pr, "merge": merge, "completion": completion,
            "controller": decision_engine}
 
 
