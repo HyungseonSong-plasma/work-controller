@@ -1,6 +1,16 @@
 name: Work
 description: Define one complete unit of work.
 body:
+  - type: dropdown
+    id: work_type
+    attributes:
+      label: Work type
+      description: Implementation changes repository files; Read-only produces analysis or review evidence without a PR.
+      options:
+        - Implementation
+        - Read-only
+    validations:
+      required: true
   - type: textarea
     id: objective
     attributes:

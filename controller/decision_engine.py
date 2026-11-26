@@ -4,7 +4,7 @@ import subprocess
 import unittest
 from unittest.mock import patch
 
-from validation.issue import validate as valid_issue
+from validation.issue import validate as valid_issue, work_type
 from validation.completion import assessment, declared_works
 from validation.merge import snapshot
 from validation.model import api, digest, pages
@@ -60,7 +60,7 @@ def pr_action(repo, pr, issue, check_reader, detail_reader):
     return result
 
 
-def decide(repo, issues, pulls, check_reader, detail_reader):
+def decide(repo, issues, pulls, check_reader, detail_reader, comment_reader=None):
     works = {i["number"]: i for i in issues if "pull_request" not in i and i["state"] == "open"}
     report = {"repository": repo, "mode": "read-only", "works": [], "unassigned_prs": []}
     for pr in sorted(pulls, key=lambda p: p["number"]):
@@ -76,10 +76,20 @@ def decide(repo, issues, pulls, check_reader, detail_reader):
         if not valid_issue(issue.get("body")):
             item["actions"].append({"action": "FIX_WORK_CONTRACT"})
             continue
-        data, blockers = assessment(repo, number, issue, pulls)
+        kind = work_type(issue.get("body"))
+        item["work_type"] = kind
+        comments = comment_reader(repo, number) if kind == "Read-only" and comment_reader else []
+        data, blockers = assessment(repo, number, issue, pulls, comments)
         item["units"] = [{"pr": u["number"], "status": u["status"]} for u in data["units"]]
         active = [p for p in pulls if p["state"] == "open" and number in declared_works(p.get("body"))]
-        if active:
+        if kind == "Read-only":
+            if data["units"]:
+                item["actions"].append({"action": "REVIEW_COMPLETION_BLOCKERS", "reasons": blockers})
+            elif blockers:
+                item["actions"].append({"action": "PERFORM_READ_ONLY", "reasons": blockers})
+            else:
+                item["actions"].append({"action": "REVIEW_COMPLETION", "review_digest": digest(data)})
+        elif active:
             for pr in sorted(active, key=lambda p: p["number"]):
                 item["actions"].append(pr_action(repo, pr, issue, check_reader, detail_reader))
         elif not blockers:
@@ -95,7 +105,8 @@ def discover(repo):
     issues = pages(f"repos/{repo}/issues?state=open&per_page=100")
     pulls = pages(f"repos/{repo}/pulls?state=all&per_page=100")
     return decide(repo, issues, pulls, required_checks,
-                  lambda r, n: api(f"repos/{r}/pulls/{n}"))
+                  lambda r, n: api(f"repos/{r}/pulls/{n}"),
+                  lambda r, n: pages(f"repos/{r}/issues/{n}/comments?per_page=100"))
 
 
 class ControllerTests(unittest.TestCase):
@@ -143,3 +154,14 @@ class ControllerTests(unittest.TestCase):
         with patch(__name__ + ".pages", side_effect=RuntimeError("unavailable")):
             with self.assertRaises(RuntimeError):
                 discover(self.repo)
+
+    def test_read_only_decisions(self):
+        issue = dict(self.issue, body="### Work type\n\nRead-only\n\n" + self.issue["body"])
+        def run(pulls, comments):
+            data = decide(self.repo, [issue], pulls, lambda r, n: self.checks, lambda r, n: self.pr,
+                          lambda r, n: comments)
+            return data["works"][0]["actions"][0]["action"]
+        self.assertEqual(run([], []), "PERFORM_READ_ONLY")
+        result = {"id": 7, "body": "### Work result\n\nEvidence"}
+        self.assertEqual(run([], [result]), "REVIEW_COMPLETION")
+        self.assertEqual(run([self.pr], [result]), "REVIEW_COMPLETION_BLOCKERS")
