@@ -119,6 +119,9 @@ def authority_command(argv):
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--pr", type=int)
     mode.add_argument("--path", nargs="+")
+    parser.add_argument("--grade-a", action="store_true", help="Check A protection only; B approval is separate")
+    parser.add_argument("--expected-head")
+    parser.add_argument("--expected-base")
     parser.add_argument("--work", type=int, help="Work number for planned path assessment")
     parser.add_argument("--approved-change", help="B-grade scope digest, only after explicit user approval")
     args = parser.parse_args(argv)
@@ -128,7 +131,11 @@ def authority_command(argv):
         parser.error("Path planning requires --work; approval is supplied only for PR checks")
     if args.pr is not None and args.work is not None:
         parser.error("PR inspection derives the Work from its body")
-    result = (authority.inspect_pr(args.repo, args.pr, approved_change=args.approved_change) if args.pr is not None
+    if args.grade_a and (args.pr is None or args.approved_change or not args.expected_head or not args.expected_base):
+        parser.error("Grade-A check requires PR, expected head and base, and no approval override")
+    if not args.grade_a and (args.expected_head or args.expected_base):
+        parser.error("Expected revisions are only used by grade-a")
+    result = (authority.inspect_pr(args.repo, args.pr, expected_head=args.expected_head, expected_base=args.expected_base, approved_change=args.approved_change, grade_a_only=args.grade_a) if args.pr is not None
               else authority.plan_paths(args.repo, args.work, args.path))
     print(json.dumps(result, indent=2, ensure_ascii=False))
     return int(not result["allowed"]) if args.pr is not None else 0
