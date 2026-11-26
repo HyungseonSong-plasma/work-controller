@@ -1,5 +1,7 @@
 name: Post-work cleanup
 on:
+  issue_comment:
+    types: [created]
   pull_request_target:
     types: [closed]
     branches: [main]
@@ -23,7 +25,7 @@ on:
         default: ''
 permissions: {}
 concurrency:
-  group: post-work-cleanup
+  group: ${{ (github.event_name != 'issue_comment' || (!github.event.issue.pull_request && github.event.issue.state == 'open' && (github.event.comment.body == '/cleanup plan' || startsWith(github.event.comment.body, '/execute-cleanup ')))) && 'post-work-cleanup' || format('post-work-cleanup-ignored-{0}', github.run_id) }}
   cancel-in-progress: false
 jobs:
   plan:
@@ -120,3 +122,87 @@ jobs:
           POST_WORK_CLEANUP_SINCE: ${{ vars.POST_WORK_CLEANUP_SINCE }}
           DIGEST: ${{ github.event_name == 'workflow_dispatch' && inputs.run_digest || needs.plan.outputs.run_digest }}
         run: python3 -m app.cli cleanup --repo "$GITHUB_REPOSITORY" --kind runs --approved-manifest "$DIGEST"
+
+  delegated-plan:
+    if: >-
+      github.ref == 'refs/heads/main' && github.event_name == 'issue_comment' &&
+      !github.event.issue.pull_request && github.event.issue.state == 'open' &&
+      github.event.comment.body == '/cleanup plan'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: read
+      actions: read
+      checks: read
+      statuses: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Inventory
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -o pipefail
+          python3 -m app.cli cleanup --repo "$GITHUB_REPOSITORY" --comment-plan | tee "$RUNNER_TEMP/review.json"
+      - name: Publish cleanup evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: review-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/review.json
+          if-no-files-found: error
+          retention-days: 1
+          overwrite: false
+  delegated-branches:
+    if: >-
+      github.ref == 'refs/heads/main' && github.event_name == 'issue_comment' &&
+      vars.AGENT_CLEANUP_DELEGATION == 'v1' &&
+      !github.event.issue.pull_request && github.event.issue.state == 'open' &&
+      startsWith(github.event.comment.body, '/execute-cleanup ') &&
+      contains(github.event.comment.body, ' branches ')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      pull-requests: read
+      issues: read
+      actions: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Verify evidence and apply
+        env:
+          GH_TOKEN: ${{ github.token }}
+          AGENT_CLEANUP_DELEGATION: ${{ vars.AGENT_CLEANUP_DELEGATION }}
+        run: python3 -m app.cli cleanup --repo "$GITHUB_REPOSITORY" --kind branches --execute-request
+  delegated-runs:
+    if: >-
+      github.ref == 'refs/heads/main' && github.event_name == 'issue_comment' &&
+      vars.AGENT_CLEANUP_DELEGATION == 'v1' &&
+      !github.event.issue.pull_request && github.event.issue.state == 'open' &&
+      startsWith(github.event.comment.body, '/execute-cleanup ') &&
+      contains(github.event.comment.body, ' runs ')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: read
+      actions: write
+      checks: read
+      statuses: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Verify evidence and apply
+        env:
+          GH_TOKEN: ${{ github.token }}
+          AGENT_CLEANUP_DELEGATION: ${{ vars.AGENT_CLEANUP_DELEGATION }}
+        run: python3 -m app.cli cleanup --repo "$GITHUB_REPOSITORY" --kind runs --execute-request
