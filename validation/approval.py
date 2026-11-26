@@ -241,3 +241,5 @@ class ApprovalTests(unittest.TestCase):
         with patch(__name__+".api", return_value=pr), patch.object(authority,"inspect_pr",return_value=authority.classify(self.policy,["README.md"])), patch(__name__+".read_state") as read:
             self.assertTrue(inspect_pr(self.repo, 1)["allowed"])
             read.assert_not_called()
+
+# Disposable owner Label approval test. Do not merge.
