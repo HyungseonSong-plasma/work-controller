@@ -299,3 +299,16 @@ The Agent correlates final MERGED/CLOSED output with the execution comment, run/
 #### Structured review evidence
 
 Successful preflight writes its JSON to the fixed `review.json` file while retaining the human-readable log; failed CLI runs do not publish an artifact. The pinned upload action stores `review-evidence-RUN-ATTEMPT` for one day. Delegated execution still requires VERIFIED, a successful current-main run and job, and the 30-minute evidence deadline. It selects exactly one matching, unexpired artifact from that run, checks origin and SHA-256 archive digest, then reads only a bounded single JSON file from the ZIP without extracting paths. It independently rechecks every prior report and comment binding. The GitHub token is sent only to the fixed GitHub API endpoint; storage download uses the GitHub-provided HTTPS redirect without that token. Missing or malformed evidence, unexpected redirects, download errors or digest mismatches stop before writes. No log or caller-supplied report fallback. Artifact retention is not an approval store. The original first delegated close (run 45897462387) failed at gh job-log retrieval, with exit status 1 and no captured HTTP detail; the underlying HTTP cause remains unknown. Stage-specific errors omit signed URLs, token values and raw responses.
+
+#### Live delegated execution evidence (2026-11-26)
+
+After owner activation, the artifact-based Close path completed the following individually approved requests on trusted main `8c27dc92714f6dfd4427b5046f3659be7d6de264`. Each initial attempt returned matching `CLOSED` JSON and the Issue was independently read back as closed/completed.
+
+| Work | VERIFIED preflight run | Execution job |
+|---|---|---|
+| #92 | [45899819592](https://github.com/HyungseonSong-plasma/work-controller/actions/runs/45899819592) | [140182859934](https://github.com/HyungseonSong-plasma/work-controller/actions/runs/45899905898/job/140182859934) |
+| #98 | [45900102397](https://github.com/HyungseonSong-plasma/work-controller/actions/runs/45900102397) | [140183957241](https://github.com/HyungseonSong-plasma/work-controller/actions/runs/45900238107/job/140183957241) |
+| #94 | [45900407544](https://github.com/HyungseonSong-plasma/work-controller/actions/runs/45900407544) | [140184922044](https://github.com/HyungseonSong-plasma/work-controller/actions/runs/45900533083/job/140184922044) |
+| #89 | [45900875023](https://github.com/HyungseonSong-plasma/work-controller/actions/runs/45900875023) | [140186454243](https://github.com/HyungseonSong-plasma/work-controller/actions/runs/45900999016/job/140186454243) |
+
+These executions exercised the structured evidence transport, current-run and artifact validation, and the existing Completion contract. They supersede the failed log-retrieval attempt as positive evidence, not as a retry of that request. They do not prove independent human identity, server-side enforcement against other writers, or automatic downstream event delivery. Delegated Merge requires its own matching live execution evidence; a successful C-rank Merge would not establish live delegated B-rank Merge. Use Work #100 and #96 for the separately reviewed Merge evidence rather than assuming success from this document or CI.
