@@ -10,7 +10,7 @@ from validation import issue, pr, merge, completion, authority, approval
 from validation.model import REPO, SHA, api, digest
 from validation.merge import read_snapshot, verify
 from validation.completion import read_assessment, approved_close, guard_closed
-from controller import decision_engine, executor, operation
+from controller import decision_engine, executor, operation, review
 from controller.decision_engine import discover
 
 
@@ -55,24 +55,12 @@ def merge_command(argv):
         return
     if not args.expected_head or not SHA.fullmatch(args.expected_head):
         parser.error("Verification requires --expected-head")
-    data = verify(args.repo, args.pr, args.approved_snapshot, args.expected_head)
     if args.merge:
-        evidence = approval.inspect_pr(args.repo, args.pr, data["head"], data["base"])
-        if not evidence["allowed"]:
-            raise ValueError(evidence["reason"])
-        approved_change = evidence.get("approval_digest")
-        if args.approved_change and args.approved_change != approved_change:
-            raise ValueError("Supplied approval digest does not match recorded evidence")
-        permission = authority.inspect_pr(args.repo, args.pr, data["head"], data["base"], approved_change)
-        if not permission["allowed"]:
-            raise ValueError(permission["reason"])
-        data = verify(args.repo, args.pr, args.approved_snapshot, args.expected_head)
-        result = api(f"repos/{args.repo}/pulls/{args.pr}/merge", "-X", "PUT",
-                     "-f", f"sha={data['head']}", "-f", "merge_method=squash")
-        if result.get("merged") is not True:
-            raise ValueError("GitHub rejected merge")
-        print(json.dumps(result))
+        print(json.dumps(merge.merge_approved(args.repo, args.pr, args.approved_snapshot,
+                                             args.expected_head, args.approved_change)))
     else:
+        data = merge.verify_full(args.repo, args.pr, args.approved_snapshot,
+                                 args.expected_head, args.approved_change)
         print("Merge preflight passed for reviewed snapshot " + digest(data))
 
 
@@ -241,7 +229,21 @@ def operation_command(argv):
     return int(result["state"] not in {"REPORTED", "READY", "PUBLISHED"})
 
 
-COMMANDS = {"operation": operation_command, "executor-live-ci": executor_live_ci_command, "executor": executor_command, "approval": approval_command, "authority": authority_command, "issue": issue_command, "pr": pr_command, "merge": merge_command,
+def review_command(argv):
+    parser = argparse.ArgumentParser(prog="review")
+    parser.add_argument("--repo", required=True)
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--comment-request", action="store_true")
+    mode.add_argument("--execute-request", action="store_true")
+    args = parser.parse_args(argv)
+    if not REPO.fullmatch(args.repo):
+        parser.error("Expected owner/repo")
+    result = review.comment_request(args.repo) if args.comment_request else review.execute_request(args.repo)
+    print(json.dumps(result, indent=2, ensure_ascii=False))
+    return int(result["state"] == "BLOCKED")
+
+
+COMMANDS = {"review": review_command, "operation": operation_command, "executor-live-ci": executor_live_ci_command, "executor": executor_command, "approval": approval_command, "authority": authority_command, "issue": issue_command, "pr": pr_command, "merge": merge_command,
             "completion": completion_command, "controller": controller_command}
 MODULES = {"operation": operation, "executor": executor, "approval": approval, "authority": authority, "issue": issue, "pr": pr, "merge": merge, "completion": completion,
            "controller": decision_engine}

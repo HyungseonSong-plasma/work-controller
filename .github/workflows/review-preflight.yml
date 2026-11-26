@@ -1,0 +1,30 @@
+name: Review preflight
+on:
+  issue_comment:
+    types: [created]
+permissions: {}
+jobs:
+  preflight:
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      !github.event.issue.pull_request &&
+      github.event.issue.state == 'open' &&
+      startsWith(github.event.comment.body, '/review ')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+      checks: read
+      statuses: read
+      actions: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Run trusted CLI
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 -m app.cli review --repo "$GITHUB_REPOSITORY" --comment-request

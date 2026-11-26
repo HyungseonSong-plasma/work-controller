@@ -1,0 +1,71 @@
+name: Review execute
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: Explicit owner-authorized operation
+        type: choice
+        options: [merge, close]
+        required: true
+      work:
+        description: Work issue number
+        type: string
+        required: true
+      pr:
+        description: PR number (merge only)
+        type: string
+        default: ''
+      snapshot:
+        description: Reviewed snapshot SHA-256
+        type: string
+        required: true
+      head:
+        description: Expected PR head SHA (merge only)
+        type: string
+        default: ''
+      evidence:
+        description: Acceptance evidence (close only)
+        type: string
+        default: ''
+permissions: {}
+concurrency:
+  group: review-execute
+  cancel-in-progress: false
+jobs:
+  merge:
+    if: github.ref == 'refs/heads/main' && inputs.action == 'merge'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      issues: read
+      pull-requests: read
+      checks: read
+      statuses: read
+      actions: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Run trusted CLI
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 -m app.cli review --repo "$GITHUB_REPOSITORY" --execute-request
+  close:
+    if: github.ref == 'refs/heads/main' && inputs.action == 'close'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Run trusted CLI
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 -m app.cli review --repo "$GITHUB_REPOSITORY" --execute-request

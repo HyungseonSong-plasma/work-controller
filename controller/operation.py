@@ -61,7 +61,7 @@ def run(repo, work=None, plan=None, execute=False, reviewed_digest=None):
 COMMAND = "/controller run"
 
 
-def request_identity(repo, event, sha, actor, run_id, attempt):
+def request_identity(repo, event, sha, actor, run_id, attempt, command=COMMAND):
     """Recheck a created comment against trusted policy and current GitHub records."""
     if not REPO.fullmatch(repo) or not SHA.fullmatch(sha):
         raise ValueError("Invalid repository or checkout SHA")
@@ -74,7 +74,7 @@ def request_identity(repo, event, sha, actor, run_id, attempt):
     if any(type(n) is not int or n < 1 for n in (work, comment)):
         raise ValueError("Invalid Work or comment number")
     if ("pull_request" in original_issue or original_issue["state"] != "open"
-            or original["body"] != COMMAND or not original["created_at"]
+            or original["body"] != command or not original["created_at"]
             or original["created_at"] != original["updated_at"]):
         raise ValueError("Expected a new exact command on an open Work")
     root = f"repos/{repo}"
@@ -92,7 +92,7 @@ def request_identity(repo, event, sha, actor, run_id, attempt):
     expected_url = f"https://api.github.com/repos/{repo}/issues/{work}"
     if (current["id"] != comment or current["issue_url"].casefold() != expected_url.casefold()
             or original["issue_url"].casefold() != expected_url.casefold()
-            or current["body"] != COMMAND or current["user"]["login"].casefold() != owner
+            or current["body"] != command or current["user"]["login"].casefold() != owner
             or current["user"]["id"] != original["user"]["id"]
             or current["created_at"] != original["created_at"]
             or current["updated_at"] != original["updated_at"]):
@@ -100,10 +100,10 @@ def request_identity(repo, event, sha, actor, run_id, attempt):
     return {"work": work, "comment": comment, "run": run_id, "attempt": attempt, "base": sha}
 
 
-def comment_request(repo):
-    """Actions-only, read-only entrypoint; no plan or write options."""
+def event_context(repo, event_name):
+    """Read the event from the exact trusted checkout."""
     if (os.environ.get("GITHUB_ACTIONS") != "true"
-            or os.environ.get("GITHUB_EVENT_NAME") != "issue_comment"
+            or os.environ.get("GITHUB_EVENT_NAME") != event_name
             or os.environ.get("GITHUB_REF") != "refs/heads/main"
             or os.environ.get("GITHUB_REPOSITORY", "").casefold() != repo.casefold()):
         raise ValueError("Comment request requires trusted-main GitHub Actions")
@@ -114,9 +114,13 @@ def comment_request(repo):
         raise ValueError("Checkout does not match event SHA")
     with open(os.environ["GITHUB_EVENT_PATH"], encoding="utf-8") as stream:
         event = json.load(stream)
-    identity = request_identity(repo, event, sha, os.environ["GITHUB_ACTOR"],
-                                int(os.environ["GITHUB_RUN_ID"]),
-                                int(os.environ["GITHUB_RUN_ATTEMPT"]))
+    return (event, sha, os.environ["GITHUB_ACTOR"],
+            int(os.environ["GITHUB_RUN_ID"]), int(os.environ["GITHUB_RUN_ATTEMPT"]))
+
+
+def comment_request(repo):
+    """Actions-only, read-only entrypoint; no plan or write options."""
+    identity = request_identity(repo, *event_context(repo, "issue_comment"))
     result = run(repo)
     result["request"] = identity
     return result

@@ -265,3 +265,19 @@ Every original assertion and negative variant is retained, including mock counts
 ### Explicit live integration test
 
 The original `live_ci()` function now resides in `tests/live_executor.py`, with its body unchanged. `python3 -m app.cli executor-live-ci` lazily imports this entrypoint; the existing `executor-ci.yml` remains unchanged. It runs only via manual workflow_dispatch on current trusted main, with the original C-grade disposable Work Unit, reviewed publication and cleanup safeguards. It is absent from the JSON allowlist and normal unit suite discovery. Unit regressions mock dispatch, reject invalid event/ref and stale checkout, and verify all unit selectors exclude live execution. These tests are not evidence of a real publication; perform and verify a separate manual main run after merge before claiming live integration success.
+
+
+## Agent review bridge
+
+The trusted-main `review-preflight.yml` accepts new owner-account comments on canonical open Work Issues with read-only permissions. Exactly one line (replace uppercase placeholders):
+
+- `/review merge snapshot PR`
+- `/review merge verify PR DIGEST HEAD`
+- `/review completion snapshot`
+- `/review completion verify DIGEST`
+
+Merge PRs must declare the requesting Work and use the trusted checkout as base. Snapshot is not verification. Verification reuses the full Merge CLI authority and required-check path, or the existing Completion contract. Match successful job JSON to repository, Work, PR where applicable, command, comment ID, run ID, attempt, base SHA, digest and expected head; require VERIFIED, execution null and no blockers. Missing, unmatched, blocked or failed reports cannot authorize execution.
+
+The owner manually dispatches `review-execute.yml` on main: action merge or close, Work number, reviewed digest, PR and head for merge only, explicit acceptance evidence for close only. Separate least-privilege jobs revalidate current trusted main, actor, scope and snapshot and use the existing merge/closure contracts. Reruns are refused; inspect actual state before retry. Agent direct connector merge/close fallback and dispatch on behalf of the owner are prohibited. The owner retains direct manual authority. No automatic merge, close or approval.
+
+GITHUB_TOKEN may suppress downstream events; repository settings or permissions may reject merges, particularly workflow changes. Live write execution needs a separately authorized disposable test. Same-account identity is not independent human attestation; native writers are not intercepted, and metadata or approval can change in the residual race before a write.
