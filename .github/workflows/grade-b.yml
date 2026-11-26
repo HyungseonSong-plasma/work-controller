@@ -3,16 +3,21 @@ on:
   pull_request_target:
     branches: [main]
     types: [opened, reopened, synchronize, edited, ready_for_review]
+  issues:
+    types: [labeled, unlabeled, edited, closed, reopened]
+  issue_comment:
+    types: [created, edited, deleted]
 permissions:
   contents: read
   pull-requests: read
   issues: read
   statuses: write
-concurrency:
-  group: grade-b-${{ github.event.pull_request.number }}
-  cancel-in-progress: false
 jobs:
   publish-grade-b:
+    if: github.event_name == 'pull_request_target'
+    concurrency:
+      group: grade-b-pr-${{ github.event.pull_request.number }}
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
@@ -44,3 +49,18 @@ jobs:
             description="B approval missing or validation failure"
           fi
           gh api "repos/$GITHUB_REPOSITORY/statuses/$PR_HEAD" -f state="$state" -f context=grade-b -f description="$description" -f target_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+  refresh-work:
+    if: github.event_name != 'pull_request_target' && !github.event.issue.pull_request
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      WORK_NUMBER: ${{ github.event.issue.number }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: main
+          persist-credentials: false
+      - name: Revalidate linked open PRs against trusted main
+        run: |
+          python3 -m app.cli approval --repo "$GITHUB_REPOSITORY" --refresh-work "$WORK_NUMBER" --expected-base "$(git rev-parse HEAD)" --target-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"

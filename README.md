@@ -95,7 +95,7 @@ Owner-controlled policy lives in `.github/change-authority.json`. **The owner mu
 Exact paths and directory prefixes ending in / are supported. Highest grade wins, including both sides of a rename. Policy, authority evaluator and grade-a workflow are always A. Promotion/demotion is owner-only.
 
 - A: ChatGPT may propose changes, but the user modifies the files personally. Automated merge is denied.
-- B: ChatGPT must present the Work, intended change and affected B paths and obtain explicit user approval in conversation **before modifying files**. After approval, normal implementation and merge procedures apply, just as for C. No separate GitHub reviewer or agent account is required.
+- B: ChatGPT must present the Work, intended change and affected B paths and obtain the user's approved Label **before modifying files**. After approval, normal implementation and merge procedures apply, just as for C. No separate GitHub reviewer or agent account is required.
 - C: autonomous modification within the approved Work, subject to ordinary contracts.
 
 ```sh
@@ -105,7 +105,7 @@ python3 -m app.cli authority --repo OWNER/REPO --pr NUMBER --approved-change DIG
 
 The path plan returns an approval digest for B. It binds repository, Work number/title/body, policy and the exact B path set. It is a scope identifier, **not proof of approval**; ChatGPT must not pass it as approved without a real user decision. If B paths, Work description, policy or the approved intent changes, request approval again. Unrelated C paths do not change the digest, but still must remain within Work scope.
 
-The unified `merge --merge` path requires the trusted-base policy and complete file enumeration. For B, a matching recorded approval comment is required; the optional `--approved-change DIGEST` must match it. A is denied; C needs no B approval. Existing merge preflight and explicit merge authorization still apply. Missing/invalid policy fails closed. Pre-write enforcement remains an operating rule until an executor integrates the gate; raw connector writes and native GitHub UI/API are not intercepted. The user retains direct manual merge authority. The CLI verifies scope consistency, not user identity or semantic consent. The owner must install the policy before automated merge. Test: `python3 -m app.cli test authority`.
+The unified `merge --merge` path requires the trusted-base policy and complete file enumeration. For B, a matching request and owner approval label are required; the optional `--approved-change DIGEST` must match it. A is denied; C needs no B approval. Existing merge preflight and explicit merge authorization still apply. Missing/invalid policy fails closed. Pre-write enforcement remains an operating rule until an executor integrates the gate; raw connector writes and native GitHub UI/API are not intercepted. The user retains direct manual merge authority. The CLI verifies scope consistency, not user identity or semantic consent. The owner must install the policy before automated merge. Test: `python3 -m app.cli test authority`.
 
 ### GitHub file-rank ruleset
 
@@ -115,16 +115,18 @@ Bootstrap: leave file-rank Disabled, manually merge this bootstrap PR, personall
 
 This blocks main merges, not feature branch edits. Commit status source pinning reduces spoofing by other integrations but does not establish an isolated security principal for all GitHub Actions workflows. Same-repository writers may modify other workflows to publish statuses, and trusted helper changes still require review. No claim of adversarial-proof access control is made.
 
-### B-rank approval evidence
+### Label-based B-rank approval
 
-Before modifying B paths, obtain actual user approval for the intended Work and path set. Use the existing authority plan to obtain the scope digest, then record the response before editing:
+The former comment-only approval format is historical evidence, not a valid authorization under this contract. Configure these three Issue labels: `B-rank: pending`, `B-rank: approved`, `B-rank: revoked`. They must be mutually exclusive. Before B writes, create a request from trusted main:
 
 ```sh
-python3 -m app.cli authority --repo OWNER/REPO --work NUMBER --path PATH1 PATH2
-python3 -m app.cli approval --repo OWNER/REPO --work NUMBER --path PATH1 PATH2 --approved-change DIGEST --user-response "Actual user response"
+python3 -m app.cli approval --repo OWNER/REPO --work NUMBER --path PATH1 PATH2 --request
+python3 -m app.cli approval --repo OWNER/REPO --work NUMBER --path PATH1 PATH2
 python3 -m app.cli approval --repo OWNER/REPO --pr NUMBER
 ```
 
-The comment starts with `### B-rank Approval` and contains a JSON block with sorted B paths, digest and actual user response. Only unedited comments attributed to the policy owner are accepted. Do not edit approval comments; create a new record after actual approval if scope changes. No extra ID registry. The same identity can be used by ChatGPT, so this is an attestation, not independent proof of consent or when code was first edited. The executor must enforce pre-write ordering; raw connector writes are not intercepted.
+A request starts a new pending label epoch and then posts a `### B-rank Approval Request` comment with exact sorted B paths and digest. Owner clears the prior state before a new request; the agent never adds/removes approved or revoked. The owner replaces pending with approved after inspecting the request, or removes approved and adds revoked to cancel. GitHub Issue events supply actor and timestamp. Only a single unedited request strictly after the latest pending-label addition and a subsequent owner-attributed approved-label addition are valid. Ambiguous timestamps, conflicting labels, missing/edited requests, scope or digest mismatch and errors fail closed as HUMAN_REVIEW. No fallback to older requests. C-only PRs need no B approval. Reapproval requires a fresh pending epoch after clearing previous labels.
 
-The trusted-base grade-b workflow publishes a status on the PR head. A-only and C-only changes do not need B evidence; mixed changes require exact B-path evidence, including rename paths. The automated merge CLI also rechecks evidence. PR events trigger grade-b; changing or deleting Issue comments or editing the Work does not automatically invalidate a previous GitHub status. Before manual merge re-run the workflow if approval/Work metadata changed. After live tests add grade-b as a required status check in file-rank (or a separate B-rank ruleset if independent toggling is preferred). The policy owner may elevate grade-b.yml and approval.py to A separately; no policy file is modified here. Tests: `python3 -m app.cli test approval`.
+The trusted-base grade-b check runs on PR events; Issue label, edit, close/reopen and comment events refresh linked open PRs. The merge CLI rechecks current evidence, independent of status. GitHub events are asynchronous and status refresh can race, be delayed or fail; no atomic merge invalidation or immutable audit log is claimed. Same-account agent access cannot cryptographically distinguish owner activity, so agent approval writes remain prohibited by operating contract. The controller isolates B approval exceptions to the affected Work (WAIT_B_APPROVAL, STOP_B_WORK, HUMAN_REVIEW); global discovery failure still stops discovery. Executor-level pre-write enforcement remains future work.
+
+Require grade-b in a main ruleset only after owner label transition tests. Tests: `python3 -m app.cli test approval` and `python3 -m app.cli test controller`.
