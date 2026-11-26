@@ -1,30 +1,24 @@
 """Structural Work Unit contract; no external dependencies."""
-import json
 import re
-import sys
 import unittest
-from validate_issue import validate as validate_issue
+from .issue import validate as validate_issue
+from .model import PLACEHOLDERS, normalize, sections, without_comments
 
 FIELDS = ("Work", "Changes", "Verification")
-HEADING = re.compile(r"^### ([^\n]+?)\s*$", re.MULTILINE)
 REFERENCE = re.compile(r"Refs #[1-9][0-9]*")
 
 
 def errors(body):
-    body = (body or "").replace("\r\n", "\n")
-    body = re.sub(r"<!--.*?-->", "", body, flags=re.S)
-    headings = list(HEADING.finditer(body))
-    if tuple(h.group(1) for h in headings) != FIELDS:
+    fields = sections(without_comments(normalize(body)))
+    if tuple(name for name, _ in fields) != FIELDS:
         return ["Expected exactly these sections in order: " + ", ".join(FIELDS)]
     problems = []
-    for i, heading in enumerate(headings):
-        end = headings[i + 1].start() if i + 1 < len(headings) else len(body)
-        value = body[heading.end():end].strip()
-        field = FIELDS[i]
+    for field, value in fields:
+        value = value.strip()
         if field == "Work":
             if not REFERENCE.fullmatch(value):
                 problems.append("Work must be one reference: Refs #<issue number>")
-        elif not value or value.casefold() in {"_no response_", "n/a", "tbd", "todo", "- [ ]"}:
+        elif not value or value.casefold() in PLACEHOLDERS:
             problems.append(field + " requires content")
     return problems
 
@@ -33,9 +27,7 @@ def work_number(body):
     problems = errors(body)
     if problems:
         raise ValueError("; ".join(problems))
-    body = re.sub(r"<!--.*?-->", "", body.replace("\r\n", "\n"), flags=re.S)
-    headings = list(HEADING.finditer(body))
-    return int(body[headings[0].end():headings[1].start()].strip().split("#")[1])
+    return int(sections(without_comments(normalize(body)))[0][1].strip().split("#")[1])
 
 
 def work_errors(number, issue):
@@ -87,23 +79,3 @@ class ContractTests(unittest.TestCase):
         for bad in (None, {}, dict(issue, number=13), dict(issue, state="closed"),
                     dict(issue, pull_request={}), dict(issue, body=""), dict(issue, body=None)):
             self.assertTrue(work_errors(12, bad))
-
-
-if __name__ == "__main__":
-    if sys.argv[1:] == ["--test"]:
-        unittest.main(argv=[sys.argv[0]])
-    elif sys.argv[1:] == ["--work-number"]:
-        try:
-            print(work_number(sys.stdin.read()))
-        except ValueError as exc:
-            print(exc, file=sys.stderr)
-            sys.exit(1)
-    elif len(sys.argv) == 3 and sys.argv[1] == "--issue-json":
-        problems = work_errors(int(sys.argv[2]), json.load(sys.stdin))
-        for problem in problems:
-            print(problem, file=sys.stderr)
-        sys.exit(bool(problems))
-    else:
-        for problem in (problems := errors(sys.stdin.read())):
-            print(problem, file=sys.stderr)
-        sys.exit(bool(problems))
