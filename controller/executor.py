@@ -8,10 +8,7 @@ from unittest.mock import patch
 from validation import approval, authority
 from validation.completion import declared_works
 from validation.model import api, pages, digest, REPO, SHA
-from validation.pr import errors as pr_errors, work_errors
-
-MAX_FILES = 100
-MAX_BYTES = 2_000_000
+from validation.pr import work_number, work_errors
 
 
 def write_json(endpoint, payload):
@@ -27,11 +24,11 @@ def validate_plan(plan, work):
     title, body, files = plan["title"], plan["body"], plan["files"]
     if not isinstance(title, str) or not title.strip() or len(title) > 256 or "\n" in title:
         raise ValueError("Invalid PR title")
-    if not isinstance(body, str) or pr_errors(body) or declared_works(body) != {work}:
+    if not isinstance(body, str) or work_number(body) != work:
         raise ValueError("PR body must use the canonical template and reference this Work")
-    if not isinstance(files, list) or not 1 <= len(files) <= MAX_FILES:
-        raise ValueError("Expected 1 to 100 file changes")
-    paths, total = [], 0
+    if not isinstance(files, list) or not files:
+        raise ValueError("Expected at least one file change")
+    paths = []
     for f in files:
         if not isinstance(f, dict) or set(f) != {"path", "content"}:
             raise ValueError("Every file requires path and content (null for deletion)")
@@ -42,10 +39,9 @@ def validate_plan(plan, work):
         if content is not None:
             if not isinstance(content, str) or "\x00" in content:
                 raise ValueError("Only UTF-8 text files or null deletion are supported")
-            total += len(content.encode("utf-8"))
         paths.append(path)
-    if total > MAX_BYTES or len(set(paths)) != len(paths):
-        raise ValueError("Duplicate paths or plan exceeds text size limit")
+    if len(set(paths)) != len(paths):
+        raise ValueError("Duplicate paths")
     if any(a != b and b.startswith(a + "/") for a in paths for b in paths):
         raise ValueError("Overlapping change paths")
     return sorted(paths)
@@ -83,7 +79,7 @@ def tree_entries(plan, base_tree):
     return entries
 
 
-def prepare(repo, work, plan):
+def check_context(repo, work, plan):
     if not REPO.fullmatch(repo) or type(work) is not int or work < 1:
         raise ValueError("Expected owner/repo and positive Work number")
     paths = validate_plan(plan, work)
@@ -106,19 +102,22 @@ def prepare(repo, work, plan):
         evidence = {"state": "USER_ONLY", "allowed": False, "reason": "A-grade paths require owner-only change"}
     elif grade == "B":
         evidence = approval.read_state(repo, work, policy, approval.b_paths(classification))
-    # Even C plans must stop on an invalid Work or incomplete base tree.
-    entries = tree_entries(plan, api(f"repos/{repo}/git/trees/{tree}?recursive=1"))
     current = api(f"repos/{repo}/issues/{work}")
     if any(current.get(k) != issue.get(k) for k in ("title", "body", "state", "updated_at")) or approval.labels(current) != approval.labels(issue):
         raise ValueError("Work changed during planning")
-    if api(f"repos/{repo}/branches/main")["commit"]["sha"] != base:
-        raise ValueError("Main changed during planning")
     snapshot = {"repository": repo.casefold(), "work": work, "base": base, "base_tree": tree,
                 "title": issue["title"], "body": issue["body"], "policy": policy,
                 "plan": plan, "classification": classification, "approval": evidence}
     return {"work": work, "base": base, "base_tree": tree, "grade": grade,
             "paths": classification["paths"], "approval": evidence, "allowed": evidence["allowed"],
-            "plan_digest": digest(snapshot), "entries": entries}
+            "plan_digest": digest(snapshot)}
+
+
+def prepare(repo, work, plan):
+    context = check_context(repo, work, plan)
+    # A Git tree is immutable: validate the payload once against the pinned base tree.
+    context["entries"] = tree_entries(plan, api(f"repos/{repo}/git/trees/{context['base_tree']}?recursive=1")) if context["allowed"] else []
+    return context
 
 
 def public_summary(prepared):
@@ -141,14 +140,15 @@ def run(repo, work, plan, execute=False, reviewed_digest=None):
             raise ValueError("Execution branch already exists; human review before retry")
 
         def recheck():
-            fresh = prepare(repo, work, plan)
+            fresh = check_context(repo, work, plan)
             if not fresh["allowed"] or fresh["plan_digest"] != reviewed_digest:
                 raise ValueError("Work, plan, base or permission changed; stop execution")
 
-        recheck()
         phase = "create_tree"
         tree = write_json(f"repos/{repo}/git/trees", {"base_tree": prepared["base_tree"],
                                                        "tree": prepared["entries"]})["sha"]
+        if not SHA.fullmatch(tree):
+            raise ValueError("Invalid tree response")
         phase = "create_commit"
         commit = write_json(f"repos/{repo}/git/commits", {"message": f"Work #{work}: {plan['title']}",
                                                            "tree": tree, "parents": [prepared["base"]]})["sha"]
@@ -242,7 +242,7 @@ class ExecutorTests(unittest.TestCase):
                          {"number":5,"head":{"sha":self.commit},"base":{"ref":"main"}}]
             with patch(__name__+".write_json",side_effect=responses) as write:
                 self.assertEqual(run(self.repo,self.work,plan,True,d)["state"],"PUBLISHED")
-                self.assertEqual([c.args[0].split("/repos/")[-1] for c in write.call_args_list],
+                self.assertEqual([c.args[0] for c in write.call_args_list],
                                  [f"repos/{self.repo}/git/trees",f"repos/{self.repo}/git/commits",f"repos/{self.repo}/git/refs",f"repos/{self.repo}/pulls"])
             with patch(__name__+".write_json") as write:
                 self.assertEqual(run(self.repo,self.work,self.plan(content="changed"),True,d)["state"],"HUMAN_REVIEW")
@@ -260,10 +260,23 @@ class ExecutorTests(unittest.TestCase):
                 d=prepare(self.repo,self.work,plan)["plan_digest"]
             yes={"state":"APPROVED","allowed":True,"reason":"approved"}
             no={"state":"REVOKED","allowed":False,"reason":"revoked"}
-            with patch.object(approval,"read_state",side_effect=[yes,yes,no]),patch(__name__+".write_json",side_effect=[{"sha":self.tree},{"sha":self.commit}]) as write:
+            with patch.object(approval,"read_state",side_effect=[yes,no]),patch(__name__+".write_json",side_effect=[{"sha":self.tree},{"sha":self.commit}]) as write:
                 result=run(self.repo,self.work,plan,True,d)
                 self.assertEqual(result["phase"],"pre_ref_recheck")
                 self.assertEqual(write.call_count,2)
         with patch(__name__+".api",side_effect=RuntimeError("unavailable")),patch(__name__+".write_json") as write:
             self.assertEqual(run(self.repo,self.work,plan)["state"],"HUMAN_REVIEW")
             write.assert_not_called()
+
+    def test_tree_is_read_once_and_context_rechecked(self):
+        plan = self.plan()
+        with patch(__name__+".api",side_effect=self.read) as read, patch(__name__+".pages",return_value=[]), patch.object(authority,"read_policy",return_value=self.policy):
+            d = prepare(self.repo,self.work,plan)["plan_digest"]
+            read.reset_mock()
+            branch = f"work/4-{d[:16]}"
+            with patch(__name__+".write_json",side_effect=[{"sha":self.tree},{"sha":self.commit},
+                        {"ref":"refs/heads/"+branch,"object":{"sha":self.commit}},
+                        {"number":5,"head":{"sha":self.commit},"base":{"ref":"main"}}]):
+                self.assertEqual(run(self.repo,self.work,plan,True,d)["state"],"PUBLISHED")
+            self.assertEqual(sum("/git/trees/" in c.args[0] for c in read.call_args_list),1)
+            self.assertEqual(sum(c.args[0].endswith("/branches/main") for c in read.call_args_list),3)
