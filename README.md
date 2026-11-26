@@ -78,3 +78,25 @@ Review digests are suggestions bound to the observed snapshot, not approvals. Th
 ### Read-only Work
 
 No PR is required or allowed. Post a non-empty Issue comment beginning with `### Work result`, containing findings and verification evidence mapped to the acceptance criteria. The completion validator requires at least one such result, no associated PRs, and valid Issue metadata. Result comments are included in the reviewed snapshot. The Controller recommends `PERFORM_READ_ONLY` until results exist. Semantic acceptance is still a manual decision; a valid comment format is not proof of correctness. Historical untyped Issues must be migrated before editing or reopening. The event-based enforcement remains asynchronous.
+
+## Change authority (A/B/C)
+
+Owner-controlled policy lives in `.github/change-authority.json`. **The owner must create and maintain this file personally; the bootstrap PR deliberately does not create it.** Example for this personal repository:
+
+```json
+{
+  "owner": "HyungseonSong-plasma",
+  "A": [".github/change-authority.json", "validation/authority.py"],
+  "B": [".github/", "validation/", "app/", "controller/"],
+  "default": "C"
+}
+```
+
+Exact paths and directory prefixes ending in / are supported. Highest grade wins across all changed paths, including both sides of a rename. Policy and authority evaluator are always A, regardless of configured patterns. A controls all promotion/demotion. B requires user approval before implementation as an operating rule, and independent owner approval of the exact PR head for automated merge. C follows ordinary contracts.
+
+```sh
+python3 -m app.cli authority --repo OWNER/REPO --path validation/pr.py README.md
+python3 -m app.cli authority --repo OWNER/REPO --pr NUMBER
+```
+
+Planning is advisory until an executor integrates the path gate. The unified `merge --merge` path requires the trusted-base policy, full PR file enumeration, and authority decision; A always refuses automated merge, B requires a current independent GitHub owner APPROVED review, and C proceeds only after other merge checks. Missing/invalid policy fails closed. The same-account GitHub connector cannot supply an independent owner review of its own PR; use the user's direct UI merge or establish a distinct agent identity. Direct GitHub UI/API and raw connector writes are not intercepted by this operational gate. Native server-side protection of all A/B paths requires separate trusted identity and enforcement; do not claim this is achieved by the CLI. The owner must install the policy before using automated merge. Test: `python3 -m app.cli test authority`.

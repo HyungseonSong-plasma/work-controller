@@ -5,7 +5,7 @@ import subprocess
 import sys
 import unittest
 
-from validation import issue, pr, merge, completion
+from validation import issue, pr, merge, completion, authority
 from validation.model import REPO, SHA, api, digest
 from validation.merge import read_snapshot, verify
 from validation.completion import read_assessment, approved_close, guard_closed
@@ -56,6 +56,10 @@ def merge_command(argv):
         parser.error("Verification requires --expected-head")
     data = verify(args.repo, args.pr, args.approved_snapshot, args.expected_head)
     if args.merge:
+        permission = authority.inspect_pr(args.repo, args.pr, data["head"], data["base"])
+        if not permission["allowed"]:
+            raise ValueError(permission["reason"])
+        data = verify(args.repo, args.pr, args.approved_snapshot, args.expected_head)
         result = api(f"repos/{args.repo}/pulls/{args.pr}/merge", "-X", "PUT",
                      "-f", f"sha={data['head']}", "-f", "merge_method=squash")
         if result.get("merged") is not True:
@@ -108,9 +112,24 @@ def controller_command(argv):
 
 
 
-COMMANDS = {"issue": issue_command, "pr": pr_command, "merge": merge_command,
+def authority_command(argv):
+    parser = argparse.ArgumentParser(prog="authority")
+    parser.add_argument("--repo", required=True)
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--pr", type=int)
+    mode.add_argument("--path", nargs="+")
+    args = parser.parse_args(argv)
+    if not REPO.fullmatch(args.repo) or (args.pr is not None and args.pr < 1):
+        parser.error("Expected owner/repo and positive PR number")
+    result = (authority.inspect_pr(args.repo, args.pr) if args.pr is not None
+              else authority.plan_paths(args.repo, args.path))
+    print(json.dumps(result, indent=2, ensure_ascii=False))
+    return int(not result["allowed"]) if args.pr is not None else 0
+
+
+COMMANDS = {"authority": authority_command, "issue": issue_command, "pr": pr_command, "merge": merge_command,
             "completion": completion_command, "controller": controller_command}
-MODULES = {"issue": issue, "pr": pr, "merge": merge, "completion": completion,
+MODULES = {"authority": authority, "issue": issue, "pr": pr, "merge": merge, "completion": completion,
            "controller": decision_engine}
 
 
