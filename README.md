@@ -127,6 +127,22 @@ python3 -m app.cli approval --repo OWNER/REPO --pr NUMBER
 
 A request starts a new pending label epoch and then posts a `### B-rank Approval Request` comment with exact sorted B paths and digest. Owner clears the prior state before a new request; the agent never adds/removes approved or revoked. The owner replaces pending with approved after inspecting the request, or removes approved and adds revoked to cancel. GitHub Issue events supply actor and timestamp. Only a single unedited request strictly after the latest pending-label addition and a subsequent owner-attributed approved-label addition are valid. Ambiguous timestamps, conflicting labels, missing/edited requests, scope or digest mismatch and errors fail closed as HUMAN_REVIEW. No fallback to older requests. C-only PRs need no B approval. Reapproval requires a fresh pending epoch after clearing previous labels.
 
-The trusted-base grade-b check runs on PR events; Issue label, edit, close/reopen and comment events refresh linked open PRs. The merge CLI rechecks current evidence, independent of status. GitHub events are asynchronous and status refresh can race, be delayed or fail; no atomic merge invalidation or immutable audit log is claimed. Same-account agent access cannot cryptographically distinguish owner activity, so agent approval writes remain prohibited by operating contract. The controller isolates B approval exceptions to the affected Work (WAIT_B_APPROVAL, STOP_B_WORK, HUMAN_REVIEW); global discovery failure still stops discovery. Executor-level pre-write enforcement remains future work.
+The trusted-base grade-b check runs on PR events; Issue label, edit, close/reopen and comment events refresh linked open PRs. The merge CLI rechecks current evidence, independent of status. GitHub events are asynchronous and status refresh can race, be delayed or fail; no atomic merge invalidation or immutable audit log is claimed. Same-account agent access cannot cryptographically distinguish owner activity, so agent approval writes remain prohibited by operating contract. The controller isolates B approval exceptions to the affected Work (WAIT_B_APPROVAL, STOP_B_WORK, HUMAN_REVIEW); global discovery failure still stops discovery. The bounded Executor v0.1 enforces pre-write approval on its own publisher path; other writers are not intercepted.
 
 Require grade-b in a main ruleset only after owner label transition tests. Tests: `python3 -m app.cli test approval` and `python3 -m app.cli test controller`.
+
+## Controller Executor v0.1
+
+The Decision Engine recommends actions; a caller prepares a JSON file-change plan for a new Work Unit (PLAN_WORK only). Review semantic scope before execution. Example:
+
+```json
+{"title":"Update docs","body":"### Work\n\nRefs #123\n\n### Changes\n\nUpdate docs\n\n### Verification\n\nReview text","files":[{"path":"README.md","content":"New full text\n"}]}
+```
+
+```sh
+python3 -m app.cli executor --repo OWNER/REPO --work 123 --plan plan.json
+python3 -m app.cli executor --repo OWNER/REPO --work 123 --plan plan.json --execute --reviewed-plan DIGEST
+python3 -m app.cli test executor
+```
+
+Dry-run performs no writes. Explicit execution requires a fresh reviewed plan digest binding the Work, current base, policy, actual payload and approval evidence. It uses complete trusted Git tree enumeration, rejects non-regular files, overlapping paths, no-op edits, invalid data, A paths and unapproved B scopes. UTF-8 text upserts and explicit null deletions only (100 files, 2 MB total). Creates a commit against main, then a new non-force branch and canonical PR, rechecking before branch and PR publication. An existing active or delivered Work Unit is outside v0.1. No arbitrary shell command, main update, automatic merge, closure or schedule. Errors return HUMAN_REVIEW with phase and possible partial objects/ref; inspect state rather than retry blindly. The caller still judges semantic scope; raw connector writes, concurrent approval changes and external agent execution are not intercepted or atomic. Existing merge and completion contracts are unchanged.
