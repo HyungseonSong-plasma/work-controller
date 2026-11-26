@@ -151,3 +151,5 @@ class ApprovalTests(unittest.TestCase):
                 record("owner/repo", 3, self.paths, "b"*64, "Approved")
             call.assert_not_called()
             self.assertEqual(record("owner/repo", 3, self.paths, self.scope, "Approved")["comment_id"], 9)
+
+# Disposable approval scope test; never merge.
