@@ -58,7 +58,7 @@ class MergeTests(unittest.TestCase):
           "base": {"ref": "main", "sha": "a"*40, "repo": {"full_name": repo}},
           "head": {"sha": "b"*40}}
     issue = {"number": 3, "state": "open", "title": "Work",
-             "body": "### Objective\n\nX\n\n### Scope\n\nX only\n\n### Acceptance criteria\n\nX passes"}
+             "body": "### Work type\n\nImplementation\n\n### Objective\n\nX\n\n### Scope\n\n#### Constraints\n\n- X only\n\n#### Actions\n\n- Implement X\n\n### Acceptance criteria\n\nX passes"}
 
     def test_valid_snapshot(self):
         data = snapshot(self.pr, self.issue, self.repo, 4)

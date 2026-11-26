@@ -140,7 +140,7 @@ def discover(repo):
 class ControllerTests(unittest.TestCase):
     repo = "owner/repo"
     issue = {"number": 1, "title": "Work", "state": "open",
-             "body": "### Objective\n\nX\n\n### Scope\n\nX only\n\n### Acceptance criteria\n\nX passes"}
+             "body": "### Work type\n\nImplementation\n\n### Objective\n\nX\n\n### Scope\n\n#### Constraints\n\n- X only\n\n#### Actions\n\n- Implement X\n\n### Acceptance criteria\n\nX passes"}
     pr = {"number": 2, "title": "Change", "state": "open", "draft": False,
           "body": "### Work\n\nRefs #1\n\n### Changes\n\nX\n\n### Verification\n\nTests pass",
           "base": {"ref": "main", "sha": "a"*40, "repo": {"full_name": repo}},
@@ -184,7 +184,7 @@ class ControllerTests(unittest.TestCase):
                 discover(self.repo)
 
     def test_read_only_decisions(self):
-        issue = dict(self.issue, body="### Work type\n\nRead-only\n\n" + self.issue["body"])
+        issue = dict(self.issue, body=self.issue["body"].replace("Implementation", "Read-only", 1))
         def run(pulls, comments):
             data = decide(self.repo, [issue], pulls, lambda r, n: self.checks, lambda r, n: self.pr,
                           lambda r, n: comments)

@@ -197,7 +197,7 @@ class ApprovalTests(unittest.TestCase):
     repo = "owner/repo"
     policy = {"owner": "owner", "A": [], "B": ["app/", "validation/"], "default": "C"}
     issue = {"number": 3, "title": "Work", "state": "open",
-             "body": "### Work type\n\nImplementation\n\n### Objective\n\nX\n\n### Scope\n\nX only\n\n### Acceptance criteria\n\nX passes"}
+             "body": "### Work type\n\nImplementation\n\n### Objective\n\nX\n\n### Scope\n\n#### Constraints\n\n- X only\n\n#### Actions\n\n- Implement X\n\n### Acceptance criteria\n\nX passes"}
     paths = ["app/cli.py"]
 
     def fixture(self):
