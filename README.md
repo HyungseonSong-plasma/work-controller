@@ -105,12 +105,26 @@ python3 -m app.cli authority --repo OWNER/REPO --pr NUMBER --approved-change DIG
 
 The path plan returns an approval digest for B. It binds repository, Work number/title/body, policy and the exact B path set. It is a scope identifier, **not proof of approval**; ChatGPT must not pass it as approved without a real user decision. If B paths, Work description, policy or the approved intent changes, request approval again. Unrelated C paths do not change the digest, but still must remain within Work scope.
 
-The unified `merge --merge` path requires the trusted-base policy and complete file enumeration. For B, supply `--approved-change DIGEST` only after actual user approval. A is denied; C needs no B approval. Existing merge preflight and explicit merge authorization still apply. Missing/invalid policy fails closed. Pre-write enforcement remains an operating rule until an executor integrates the gate; raw connector writes and native GitHub UI/API are not intercepted. The user retains direct manual merge authority. The CLI verifies scope consistency, not user identity or semantic consent. The owner must install the policy before automated merge. Test: `python3 -m app.cli test authority`.
+The unified `merge --merge` path requires the trusted-base policy and complete file enumeration. For B, a matching recorded approval comment is required; the optional `--approved-change DIGEST` must match it. A is denied; C needs no B approval. Existing merge preflight and explicit merge authorization still apply. Missing/invalid policy fails closed. Pre-write enforcement remains an operating rule until an executor integrates the gate; raw connector writes and native GitHub UI/API are not intercepted. The user retains direct manual merge authority. The CLI verifies scope consistency, not user identity or semantic consent. The owner must install the policy before automated merge. Test: `python3 -m app.cli test authority`.
 
-### GitHub A_rank ruleset
+### GitHub file-rank ruleset
 
 The `grade-a` commit status is published by the trusted-base `pull_request_target` workflow. It checks actual changed paths, including previous paths of renames, against the base policy. A or unavailable policy/data fails; B and C pass this particular gate. The workflow never executes candidate code. The status is posted explicitly to the PR head SHA because the target workflow itself runs against the base.
 
-Bootstrap: leave A_rank Disabled, manually merge this bootstrap PR, personally create the policy file in another Work Unit PR, and manually merge that PR. After successful and failing disposable PR tests, require `grade-a` from GitHub Actions on main (strict up-to-date, no bypass), then activate A_rank. For future A edits, the owner temporarily disables A_rank, personally edits and merges, then restores it. Keep pr_merge_restriction active throughout.
+Bootstrap: leave file-rank Disabled, manually merge this bootstrap PR, personally create the policy file in another Work Unit PR, and manually merge that PR. After successful and failing disposable PR tests, require `grade-a` from GitHub Actions on main (strict up-to-date, no bypass), then activate file-rank. For future A edits, the owner temporarily disables file-rank, personally edits and merges, then restores it. Keep pr_merge_restriction active throughout.
 
 This blocks main merges, not feature branch edits. Commit status source pinning reduces spoofing by other integrations but does not establish an isolated security principal for all GitHub Actions workflows. Same-repository writers may modify other workflows to publish statuses, and trusted helper changes still require review. No claim of adversarial-proof access control is made.
+
+### B-rank approval evidence
+
+Before modifying B paths, obtain actual user approval for the intended Work and path set. Use the existing authority plan to obtain the scope digest, then record the response before editing:
+
+```sh
+python3 -m app.cli authority --repo OWNER/REPO --work NUMBER --path PATH1 PATH2
+python3 -m app.cli approval --repo OWNER/REPO --work NUMBER --path PATH1 PATH2 --approved-change DIGEST --user-response "Actual user response"
+python3 -m app.cli approval --repo OWNER/REPO --pr NUMBER
+```
+
+The comment starts with `### B-rank Approval` and contains a JSON block with sorted B paths, digest and actual user response. Only unedited comments attributed to the policy owner are accepted. Do not edit approval comments; create a new record after actual approval if scope changes. No extra ID registry. The same identity can be used by ChatGPT, so this is an attestation, not independent proof of consent or when code was first edited. The executor must enforce pre-write ordering; raw connector writes are not intercepted.
+
+The trusted-base grade-b workflow publishes a status on the PR head. A-only and C-only changes do not need B evidence; mixed changes require exact B-path evidence, including rename paths. The automated merge CLI also rechecks evidence. PR events trigger grade-b; changing or deleting Issue comments or editing the Work does not automatically invalidate a previous GitHub status. Before manual merge re-run the workflow if approval/Work metadata changed. After live tests add grade-b as a required status check in file-rank (or a separate B-rank ruleset if independent toggling is preferred). The policy owner may elevate grade-b.yml and approval.py to A separately; no policy file is modified here. Tests: `python3 -m app.cli test approval`.
