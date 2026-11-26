@@ -1,0 +1,28 @@
+name: Temporary controller integration
+on:
+  pull_request:
+    types: [opened]
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+  checks: read
+jobs:
+  exercise:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
+      - name: Discover live Work and Work Units
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TEST_PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          python3 controller.py --repo "$GITHUB_REPOSITORY" > "$RUNNER_TEMP/controller.json"
+          jq -e '.mode == "read-only"' "$RUNNER_TEMP/controller.json"
+          jq -e '.works[] | select(.work == 29) | .actions | any(.action == "REVIEW_COMPLETION")' "$RUNNER_TEMP/controller.json"
+          jq -e --argjson pr "$TEST_PR" '.works[] | select(.work == 31) | .units | any(.pr == $pr and .status == "open")' "$RUNNER_TEMP/controller.json"
+          jq '.works[] | {work, actions}' "$RUNNER_TEMP/controller.json"
