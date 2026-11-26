@@ -88,3 +88,114 @@ class CleanupTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "trusted-main"):
                 cleanup.context("example/test", "runs", None)
             api.assert_not_called()
+
+
+class CleanupLifecycleTests(unittest.TestCase):
+    def setUp(self):
+        self.ctx = {"repo": "example/test", "root": "repos/example/test", "id": 1,
+                    "base": "b" * 40, "default": "main", "owner": "owner",
+                    "since": "", "run": 999, "automatic": False}
+        self.work = {"number": 10, "title": "Test", "state": "closed", "state_reason": "completed",
+                     "closed_at": "2020-01-01T00:30:00Z",
+                     "body": "### Work type\n\nImplementation\n\n### Objective\n\nTest\n\n### Scope\n\n#### Constraints\n\n- Local only.\n\n#### Actions\n\n- Verify.\n\n### Acceptance criteria\n\nVerified result."}
+        body = "### Work\n\nRefs #10\n\n### Changes\n\nTest change.\n\n### Verification\n\nTest result."
+        self.pull = {"number": 11, "id": 101, "title": "Merged unit", "state": "closed",
+                     "body": body, "merged_at": "2020-01-01T00:10:00Z",
+                     "closed_at": "2020-01-01T00:10:00Z", "merge_commit_sha": "c" * 40,
+                     "head": {"repo": {"id": 1}, "ref": "work/test", "sha": "a" * 40},
+                     "base": {"repo": {"id": 1, "full_name": "example/test"}, "ref": "main"}}
+        self.branch = {"name": "work/test", "protected": False, "commit": {"sha": "a" * 40}}
+        self.cat = {"pulls": [self.pull], "issues": {10: self.work},
+                    "branches": {"work/test": self.branch}, "open_refs": set(), "open_heads": set()}
+
+    def compare_or_rules(self, path):
+        if "/compare/" in path:
+            self.assertTrue(path.endswith("c" * 40 + "..." + "b" * 40))
+            return {"status": "ahead", "behind_by": 0}
+        if "/rules/branches/" in path:
+            return []
+        self.fail("Unexpected API: " + path)
+
+    def test_squash_merged_branch(self):
+        with patch.object(cleanup, "api", side_effect=self.compare_or_rules):
+            target, reason = cleanup.branch_target(self.ctx, self.cat, self.branch, set())
+        self.assertIsNone(reason)
+        self.assertEqual(target["disposition"], "merged")
+        self.assertEqual(target["head"], "a" * 40)
+        self.assertEqual(target["merge_commit"], "c" * 40)
+
+    def test_discarded_completed_work(self):
+        discarded = dict(self.pull, number=12, id=102, merged_at=None, merge_commit_sha=None,
+                         head=dict(self.pull["head"], ref="test/discard", sha="d" * 40))
+        self.cat["pulls"].append(discarded)
+        close = {"id": 1, "event": "closed", "created_at": discarded["closed_at"],
+                 "actor": {"login": "owner"}}
+        with patch.object(cleanup, "listed", return_value=[close]):
+            target, reason = cleanup.terminal(self.ctx, self.cat, discarded)
+        self.assertIsNone(reason)
+        self.assertEqual(target["disposition"], "discarded")
+        self.assertEqual(target["terminal_at"], self.work["closed_at"])
+        with patch.object(cleanup, "listed", return_value=[dict(close, actor={"login": "other"})]):
+            self.assertIsNone(cleanup.terminal(self.ctx, self.cat, discarded)[0])
+
+    def test_missing_or_invalid_work(self):
+        for w in (None, dict(self.work, body=""), dict(self.work, state_reason="not_planned"),
+                  dict(self.work, pull_request={})):
+            with self.subTest(work=w), patch.object(cleanup, "api") as api:
+                self.cat["issues"] = {10: w} if w else {}
+                self.assertIsNone(cleanup.terminal(self.ctx, self.cat, self.pull)[0])
+                api.assert_not_called()
+
+    def test_unreachable_merge_preserved(self):
+        with patch.object(cleanup, "api", return_value={"status": "diverged", "behind_by": 1}):
+            self.assertIsNone(cleanup.terminal(self.ctx, self.cat, self.pull)[0])
+
+    def test_busy_and_open_ref_preserved(self):
+        with patch.object(cleanup, "api") as api:
+            self.assertIsNone(cleanup.branch_target(self.ctx, self.cat, self.branch, {"work/test"})[0])
+            self.cat["open_refs"].add("work/test")
+            self.assertIsNone(cleanup.branch_target(self.ctx, self.cat, self.branch, set())[0])
+            api.assert_not_called()
+
+    def test_reused_branch_preserved(self):
+        self.cat["pulls"].append(dict(self.pull, number=12, id=102))
+        with patch.object(cleanup, "api") as api:
+            self.assertIsNone(cleanup.branch_target(self.ctx, self.cat, self.branch, set())[0])
+            api.assert_not_called()
+
+    def test_historical_cutoff(self):
+        self.ctx["since"] = "2021-01-01T00:00:00Z"
+        with patch.object(cleanup, "api", side_effect=self.compare_or_rules):
+            self.assertIsNone(cleanup.terminal(self.ctx, self.cat, self.pull)[0])
+
+    def candidate_run(self):
+        return {"id": 12345, "path": ".github/workflows/pr-contract.yml", "event": "pull_request",
+                "status": "completed", "conclusion": "cancelled", "run_attempt": 1,
+                "repository": {"id": 1}, "head_repository": {"id": 1},
+                "head_sha": "a" * 40, "head_branch": "work/test",
+                "updated_at": "2020-01-01T00:20:00Z", "check_suite_id": 45,
+                "pull_requests": [{"number": 11, "id": 101, "head": self.pull["head"],
+                                   "base": self.pull["base"]}]}
+
+    def test_disposable_run_and_cross_work_evidence(self):
+        run = self.candidate_run()
+        jobs = [{"id": 67890, "status": "completed", "conclusion": "cancelled", "run_attempt": 1}]
+        with patch.object(cleanup, "api", side_effect=self.compare_or_rules), \
+                patch.object(cleanup, "counted", side_effect=lambda path, field: jobs if field == "jobs" else []), \
+                patch.object(cleanup, "listed", return_value=[]):
+            target, reason = cleanup.run_target(self.ctx, self.cat, run)
+            self.assertIsNone(reason)
+            self.assertEqual(target["run"], 12345)
+            self.assertEqual(target["jobs"], [67890])
+            self.cat["issues"][20] = {"body": "Preserve run 12345 as acceptance evidence."}
+            self.assertIsNone(cleanup.run_target(self.ctx, self.cat, run)[0])
+
+    def test_empty_pr_association_preserved(self):
+        run = dict(self.candidate_run(), pull_requests=[])
+        with patch.object(cleanup, "api", return_value={"id": 45, "head_sha": "a" * 40,
+                                                       "head_branch": "work/test", "pull_requests": []}), \
+                patch.object(cleanup, "counted") as counted:
+            target, reason = cleanup.run_target(self.ctx, self.cat, run)
+            self.assertIsNone(target)
+            self.assertIn("association", reason)
+            counted.assert_not_called()

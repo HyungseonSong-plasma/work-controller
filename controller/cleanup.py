@@ -301,12 +301,14 @@ def run_target(ctx, cat, run):
     if not run_is_disposable(run, jobs, artifacts):
         return None, "Significant job/attempt/artifact evidence"
     ids = [ident, *(j["id"] for j in jobs)]
-    comments = [*listed(ctx["root"] + f"/issues/{relation['work']}/comments?per_page=100", "id"),
-                *listed(ctx["root"] + f"/issues/{p['number']}/comments?per_page=100", "id"),
-                *listed(ctx["root"] + f"/pulls/{p['number']}/reviews?per_page=100", "id"),
-                *listed(ctx["root"] + f"/pulls/{p['number']}/comments?per_page=100", "id")]
+    # Review/acceptance references may be on a different Work. Search repository
+    # issue/PR bodies, conversation and inline review comments, plus related PR reviews.
+    comments = [*listed(ctx["root"] + "/issues/comments?per_page=100", "id"),
+                *listed(ctx["root"] + "/pulls/comments?per_page=100", "id"),
+                *listed(ctx["root"] + f"/pulls/{p['number']}/reviews?per_page=100", "id")]
     statuses = listed(ctx["root"] + f"/commits/{relation['head']}/statuses?per_page=100", "id")
-    texts = [cat["issues"][relation["work"]].get("body"), p.get("body"),
+    texts = [*(x.get("body") for x in cat["issues"].values()),
+             *(x.get("body") for x in cat["pulls"]),
              *(x.get("body") for x in comments), *(x.get("target_url") for x in statuses)]
     if references_evidence(texts, ids):
         return None, "Work/PR review or status references run evidence"
