@@ -441,7 +441,7 @@ class CommentRequestTests(unittest.TestCase):
                     review.execute_request(self.repo)
                 write.assert_not_called()
 
-    def test_delegated_verified_reference_and_log_parsing(self):
+    def test_delegated_verified_reference_and_artifact_binding(self):
         from datetime import datetime, timezone
         from controller import review
         from validation.model import digest
@@ -463,7 +463,7 @@ class CommentRequestTests(unittest.TestCase):
         original = dict(self.comment, body=command, created_at=now, updated_at=now)
         args = (self.repo, identity, 101, 102, inputs, now, "owner")
         with patch.object(review, "api", side_effect=[run, {"total_count": 1, "jobs": [job]}, original]), \
-                patch.object(review, "read_review_log", return_value=report):
+                patch.object(review, "read_review_artifact", return_value=report):
             self.assertEqual(review.verified_reference(*args), now)
         for bad_run in (dict(run, head_sha="c"*40), dict(run, conclusion="failure"),
                         dict(run, path="other"), dict(run, event="workflow_dispatch")):
@@ -479,20 +479,116 @@ class CommentRequestTests(unittest.TestCase):
                     dict(report, request=dict(report["request"], comment=52)),
                     dict(report, snapshot=dict(data, head="c"*40))):
             with patch.object(review, "api", side_effect=[run, {"total_count": 1, "jobs": [job]}]), \
-                    patch.object(review, "read_review_log", return_value=bad), self.assertRaises(ValueError):
+                    patch.object(review, "read_review_artifact", return_value=bad), self.assertRaises(ValueError):
                 review.verified_reference(*args)
         with patch.object(review, "api", side_effect=[run, {"total_count": 1, "jobs": [job]},
                                                          dict(original, updated_at="2000-01-01T00:00:00Z")]), \
-                patch.object(review, "read_review_log", return_value=report), self.assertRaises(ValueError):
+                patch.object(review, "read_review_artifact", return_value=report), self.assertRaises(ValueError):
             review.verified_reference(*args)
-        raw = "\n".join(now + " " + line for line in json.dumps(report, indent=2).splitlines()).encode()
-        with patch.object(review.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, raw)) as gh:
-            self.assertEqual(review.read_review_log(self.repo, 102), report)
-            self.assertEqual(gh.call_args.args[0][-1], "repos/owner/repo/actions/jobs/102/logs")
-            self.assertEqual(gh.call_args.kwargs["timeout"], 20)
-        for bad in (b"nothing", raw + b"\n" + raw, b"{\n", b"x"*(review.MAX_REVIEW_LOG+1)):
-            with patch.object(review.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, bad)), self.assertRaises(ValueError):
-                review.read_review_log(self.repo, 102)
+    def test_review_artifact_archive_and_metadata(self):
+        from datetime import datetime, timedelta, timezone
+        import hashlib
+        import io
+        import zipfile
+        from controller import review
+
+        def pack(files):
+            stream = io.BytesIO()
+            with zipfile.ZipFile(stream, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+                for name, value in files:
+                    archive.writestr(name, value)
+            return stream.getvalue()
+
+        def checksum(raw):
+            return "sha256:" + hashlib.sha256(raw).hexdigest()
+
+        report = {"state": "VERIFIED", "request": {"run": 101, "attempt": 2}}
+        raw = pack([("review.json", json.dumps(report))])
+        self.assertEqual(review.decode_review_archive(raw, checksum(raw)), report)
+        for bad in (b"not zip", pack([("../review.json", "{}")]),
+                    pack([("review.json", "{}"), ("extra.json", "{}")]),
+                    pack([("review.json", "[]")]), pack([("review.json", "not json")]),
+                    pack([("review.json", '{"a":1,"a":2}')]),
+                    pack([("review.json", '{"a":NaN}')]),
+                    pack([("review.json", "x"*(review.MAX_REVIEW_JSON+1))])):
+            with self.subTest(size=len(bad)), self.assertRaises(ValueError):
+                review.decode_review_archive(bad, checksum(bad))
+        with self.assertRaisesRegex(ValueError, "digest mismatch"):
+            review.decode_review_archive(raw, "sha256:"+"0"*64)
+        with self.assertRaisesRegex(ValueError, "size invalid"):
+            review.decode_review_archive(b"x"*(review.MAX_REVIEW_ARCHIVE+1), checksum(raw))
+
+        expires = (datetime.now(timezone.utc) + timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        run = {"id": 101, "run_attempt": 2, "head_sha": self.sha,
+               "repository": {"id": 7}, "head_repository": {"id": 7}}
+        item = {"id": 303, "name": "review-evidence-101-2", "size_in_bytes": len(raw),
+                "digest": checksum(raw), "expired": False, "expires_at": expires,
+                "workflow_run": {"id": 101, "head_sha": self.sha, "head_branch": "main",
+                                 "repository_id": 7, "head_repository_id": 7}}
+        def listing(entries):
+            return {"total_count": len(entries), "artifacts": entries}
+
+        with patch.object(review, "api", return_value=listing([dict(item, name="review-evidence-101-1"), item])) as api, \
+                patch.object(review, "download_review_archive", return_value=raw) as download:
+            self.assertEqual(review.read_review_artifact(self.repo, run), report)
+            api.assert_called_once_with("repos/owner/repo/actions/runs/101/artifacts?per_page=100")
+            download.assert_called_once_with(self.repo, 303)
+        for bad in (listing([]), listing([item, item]), listing([dict(item, name="review-evidence-101-1")]),
+                    listing([dict(item, expired=True)]), listing([dict(item, expires_at="2000-01-01T00:00:00Z")]),
+                    listing([dict(item, digest=None)]), listing([dict(item, size_in_bytes=review.MAX_REVIEW_ARCHIVE+1)]),
+                    listing([dict(item, workflow_run=dict(item["workflow_run"], id=999))]),
+                    listing([dict(item, workflow_run=dict(item["workflow_run"], head_sha="c"*40))]),
+                    listing([dict(item, workflow_run=dict(item["workflow_run"], repository_id=8))]),
+                    {"total_count": 2, "artifacts": [item]}):
+            with patch.object(review, "api", return_value=bad), \
+                    patch.object(review, "download_review_archive") as download:
+                with self.assertRaises(ValueError):
+                    review.read_review_artifact(self.repo, run)
+                download.assert_not_called()
+        with patch.object(review, "api", side_effect=subprocess.CalledProcessError(1, ["gh"])), \
+                self.assertRaisesRegex(ValueError, "listing failed"):
+            review.read_review_artifact(self.repo, run)
+        with patch.object(review, "api", return_value=listing([item])), \
+                patch.object(review, "download_review_archive", side_effect=ValueError("download failed")), \
+                self.assertRaisesRegex(ValueError, "download failed"):
+            review.read_review_artifact(self.repo, run)
+
+    def test_review_artifact_download_no_token_forwarding(self):
+        import io
+        from unittest.mock import MagicMock
+        from controller import review
+        from urllib.error import HTTPError
+
+        def error(code, location=None):
+            return HTTPError("https://api.github.com", code, "test",
+                             {"Location": location} if location else {}, io.BytesIO())
+
+        signed = "https://example.blob.core.windows.net/path?sig=private"
+        response = MagicMock()
+        response.__enter__.return_value = response
+        response.status = 200
+        response.read.return_value = b"archive"
+        with patch.dict(os.environ, {"GH_TOKEN": "private-token"}, clear=True), \
+                patch.object(review.http_request, "build_opener") as build:
+            opener = build.return_value
+            opener.open.side_effect = [error(302, signed), response]
+            self.assertEqual(review.download_review_archive(self.repo, 303), b"archive")
+            first, second = [call.args[0] for call in opener.open.call_args_list]
+            self.assertEqual(first.full_url, "https://api.github.com/repos/owner/repo/actions/artifacts/303/zip")
+            self.assertEqual(first.get_header("Authorization"), "Bearer private-token")
+            self.assertEqual(second.full_url, signed)
+            self.assertIsNone(second.get_header("Authorization"))
+            response.read.assert_called_once_with(review.MAX_REVIEW_ARCHIVE+1)
+            for bad, message in (([error(403)], "API failed"), ([error(302, "http://example.blob.core.windows.net/a")], "redirect"),
+                                 ([error(302, "https://example.org/a")], "redirect"),
+                                 ([error(302, signed), error(404)], "storage failed"),
+                                 ([error(302, signed), TimeoutError()], "storage transport failed")):
+                opener.open.side_effect = bad
+                with self.assertRaisesRegex(ValueError, message) as failure:
+                    review.download_review_archive(self.repo, 303)
+                self.assertNotIn("private", str(failure.exception))
+        with patch.dict(os.environ, {}, clear=True), self.assertRaisesRegex(ValueError, "GH_TOKEN"):
+            review.download_review_archive(self.repo, 303)
 
     def test_delegated_replay_guard(self):
         from controller import review
