@@ -248,3 +248,16 @@ Approval, Completion and Merge use the same schema v1 and static allowlist. The 
 | Merge: valid_snapshot, invalid_metadata, review_snapshot_changes, verify_rejects_stale_or_failed | 6 invalid metadata | valid_snapshot, review_snapshot_changes, verify_rejects_stale_or_failed |
 
 All original test variations are retained; complex Python tests keep original assertions and patch actual production module attributes. Authority and Controller tests remain in their original modules. Targeted commands: `python3 -m app.cli test approval`, `python3 -m app.cli test completion`, `python3 -m app.cli test merge`. Full CI also exercises these selectors through wrapper regression tests.
+
+### Controller unit tests
+
+The controller, executor and operation selectors now load both literal JSON inputs and explicit Python scenarios using the same schema v1. The fixed Decision Engine adapters provide in-memory check/detail readers; the Operation identity adapter always mocks the production API and policy reader. JSON cannot choose mocks, call sequences, or write-capable targets. Executor JSON only calls pure validate_plan and tree_entries; the unchanged-blob fixture uses the independently calculated Git SHA-1 for the string "same".
+
+| Original group | JSON cases | Python scenarios retained |
+|---|---:|---|
+| Controller: plan_and_completion, pr_states, invalid_and_orphan | 4 + 7 + 4 | api_failure, read_only_decisions, approval_isolation, removed_approval_without_active_pr |
+| Executor: validation | 5 invalid paths + 5 tree/reference variants | authority_and_no_writes, publish_and_stale, recheck_revocation_and_api_failure, tree_is_read_once_and_context_rechecked |
+| CommentRequest: valid_identity, invalid_event, stale_current_state | 1 + 9 + 8 | fail_closed_and_read_only_dispatch |
+| Operation | 0 | report_only, dispatch_and_dry_run, blocked_and_ambiguous, failures_and_explicit_arguments |
+
+Every original assertion and negative variant is retained, including mock counts, arguments, no-write checks, set/identity/digest assertions in unchanged suites, and both Operation and CommentRequest classes. Targeted selectors: `python3 -m app.cli test controller`, `python3 -m app.cli test executor`, `python3 -m app.cli test operation`. Full CI exercises them via wrapper regressions. Executor live CI remains in its current location and is not invoked by the unit runner. Authority tests remain owner-protected in validation/authority.py.

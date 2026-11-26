@@ -1,0 +1,681 @@
+{
+  "version": 1,
+  "target": "controller.decision_engine",
+  "cases": [
+    {
+      "name": "plan_no_pr",
+      "function": "first_action",
+      "args": [
+        "owner/repo",
+        [
+          {
+            "number": 1,
+            "title": "Work",
+            "state": "open",
+            "body": "### Work type\n\nImplementation\n\n### Objective\n\nX\n\n### Scope\n\n#### Constraints\n\n- X only\n\n#### Actions\n\n- Implement X\n\n### Acceptance criteria\n\nX passes"
+          }
+        ],
+        [],
+        [
+          {
+            "name": "pr-template",
+            "state": "SUCCESS"
+          }
+        ],
+        null
+      ],
+      "assert": {
+        "op": "equal",
+        "value": "PLAN_WORK"
+      }
+    },
+    {
+      "name": "completion_merged",
+      "function": "first_action",
+      "args": [
+        "owner/repo",
+        [
+          {
+            "number": 1,
+            "title": "Work",
+            "state": "open",
+            "body": "### Work type\n\nImplementation\n\n### Objective\n\nX\n\n### Scope\n\n#### Constraints\n\n- X only\n\n#### Actions\n\n- Implement X\n\n### Acceptance criteria\n\nX passes"
+          }
+        ],
+        [
+          {
+            "number": 2,
+            "title": "Change",
+            "state": "closed",
+            "draft": false,
+            "body": "### Work\n\nRefs #1\n\n### Changes\n\nX\n\n### Verification\n\nTests pass",
+            "base": {
+              "ref": "main",
+              "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "repo": {
+                "full_name": "owner/repo"
+              }
+            },
+            "head": {
+              "sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            },
+            "mergeable": true,
+            "mergeable_state": "clean",
+            "merged_at": "2026-01-01",
+            "merge_commit_sha": "cccccccccccccccccccccccccccccccccccccccc"
+          }
+        ],
+        [
+          {
+            "name": "pr-template",
+            "state": "SUCCESS"
+          }
+        ],
+        null
+      ],
+      "assert": {
+        "op": "equal",
+        "value": "REVIEW_COMPLETION"
+      }
+    },
+    {
+      "name": "plan_discarded",
+      "function": "first_action",
+      "args": [
+        "owner/repo",
+        [
+          {
+            "number": 1,
+            "title": "Work",
+            "state": "open",
+            "body": "### Work type\n\nImplementation\n\n### Objective\n\nX\n\n### Scope\n\n#### Constraints\n\n- X only\n\n#### Actions\n\n- Implement X\n\n### Acceptance criteria\n\nX passes"
+          }
+        ],
+        [
+          {
+            "number": 2,
+            "title": "Change",
+            "state": "closed",
+            "draft": false,
+            "body": "### Work\n\nRefs #1\n\n### Changes\n\nX\n\n### Verification\n\nTests pass",
+            "base": {
+              "ref": "main",
+              "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "repo": {
+                "full_name": "owner/repo"
+              }
+            },
+            "head": {
+              "sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            },
+            "mergeable": true,
+            "mergeable_state": "clean",
+            "merged_at": null,
+            "merge_commit_sha": "cccccccccccccccccccccccccccccccccccccccc"
+          }
+        ],
+        [
+          {
+            "name": "pr-template",
+            "state": "SUCCESS"
+          }
+        ],
+        null
+      ],
+      "assert": {
+        "op": "equal",
+        "value": "PLAN_WORK"
+      }
+    },
+    {
+      "name": "completion_bad_contract",
+      "function": "first_action",
+      "args": [
+        "owner/repo",
+        [
+          {
+            "number": 1,
+            "title": "Work",
+            "state": "open",
+            "body": "### Work type\n\nImplementation\n\n### Objective\n\nX\n\n### Scope\n\n#### Constraints\n\n- X only\n\n#### Actions\n\n- Implement X\n\n### Acceptance criteria\n\nX passes"
+          }
+        ],
+        [
+          {
+            "number": 2,
+            "title": "Change",
+            "state": "closed",
+            "draft": false,
+            "body": "### Work\n\nRefs #1",
+            "base": {
+              "ref": "main",
+              "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "repo": {
+                "full_name": "owner/repo"
+              }
+            },
+            "head": {
+              "sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            },
+            "mergeable": true,
+            "mergeable_state": "clean",
+            "merged_at": "2026-01-01",
+            "merge_commit_sha": "cccccccccccccccccccccccccccccccccccccccc"
+          }
+        ],
+        [
+          {
+            "name": "pr-template",
+            "state": "SUCCESS"
+          }
+        ],
+        null
+      ],
+      "assert": {
+        "op": "equal",
+        "value": "REVIEW_COMPLETION_BLOCKERS"
+      }
+    },
+    {
+      "name": "pr_ready",
+      "function": "first_action",
+      "args": [
+        "owner/repo",
+        [
+          {
+            "number": 1,
+            "title": "Work",
+            "state": "open",
+            "body": "### Work type\n\nImplementation\n\n### Objective\n\nX\n\n### Scope\n\n#### Constraints\n\n- X only\n\n#### Actions\n\n- Implement X\n\n### Acceptance criteria\n\nX passes"
+          }
+        ],
+        [
+          {
+            "number": 2,
+            "title": "Change",
+            "state": "open",
+            "draft": false,
+            "body": "### Work\n\nRefs #1\n\n### Changes\n\nX\n\n### Verification\n\nTests pass",
+            "base": {
+              "ref": "main",
+              "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "repo": {
+                "full_name": "owner/repo"
+              }
+            },
+            "head": {
+              "sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            },
+            "mergeable": true,
+            "mergeable_state": "clean"
+          }
+        ],
+        [
+          {
+            "name": "pr-template",
+            "state": "SUCCESS"
+          }
+        ],
+        null
+      ],
+      "assert": {
+        "op": "equal",
+        "value": "REVIEW_MERGE"
+      }
+    },
+    {
+      "name": "pr_wait_ci",
+      "function": "first_action",
+      "args": [
+        "owner/repo",
+        [
+          {
+            "number": 1,
+            "title": "Work",
+            "state": "open",
+            "body": "### Work type\n\nImplementation\n\n### Objective\n\nX\n\n### Scope\n\n#### Constraints\n\n- X only\n\n#### Actions\n\n- Implement X\n\n### Acceptance criteria\n\nX passes"
+          }
+        ],
+        [
+          {
+            "number": 2,
+            "title": "Change",
+            "state": "open",
+            "draft": false,
+            "body": "### Work\n\nRefs #1\n\n### Changes\n\nX\n\n### Verification\n\nTests pass",
+            "base": {
+              "ref": "main",
+              "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "repo": {
+                "full_name": "owner/repo"
+              }
+            },
+            "head": {
+              "sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            },
+            "mergeable": true,
+            "mergeable_state": "clean"
+          }
+        ],
+        [],
+        null
+      ],
+      "assert": {
+        "op": "equal",
+        "value": "WAIT_CI"
+      }
+    },
+    {
+      "name": "pr_failed_ci",
+      "function": "first_action",
+      "args": [
+        "owner/repo",
+        [
+          {
+            "number": 1,
+            "title": "Work",
+            "state": "open",
+            "body": "### Work type\n\nImplementation\n\n### Objective\n\nX\n\n### Scope\n\n#### Constraints\n\n- X only\n\n#### Actions\n\n- Implement X\n\n### Acceptance criteria\n\nX passes"
+          }
+        ],
+        [
+          {
+            "number": 2,
+            "title": "Change",
+            "state": "open",
+            "draft": false,
+            "body": "### Work\n\nRefs #1\n\n### Changes\n\nX\n\n### Verification\n\nTests pass",
+            "base": {
+              "ref": "main",
+              "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "repo": {
+                "full_name": "owner/repo"
+              }
+            },
+            "head": {
+              "sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            },
+            "mergeable": true,
+            "mergeable_state": "clean"
+          }
+        ],
+        [
+          {
+            "name": "pr-template",
+            "state": "FAILURE"
+          }
+        ],
+        null
+      ],
+      "assert": {
+        "op": "equal",
+        "value": "FIX_CI"
+      }
+    },
+    {
+      "name": "pr_draft",
+      "function": "first_action",
+      "args": [
+        "owner/repo",
+        [
+          {
+            "number": 1,
+            "title": "Work",
+            "state": "open",
+            "body": "### Work type\n\nImplementation\n\n### Objective\n\nX\n\n### Scope\n\n#### Constraints\n\n- X only\n\n#### Actions\n\n- Implement X\n\n### Acceptance criteria\n\nX passes"
+          }
+        ],
+        [
+          {
+            "number": 2,
+            "title": "Change",
+            "state": "open",
+            "draft": true,
+            "body": "### Work\n\nRefs #1\n\n### Changes\n\nX\n\n### Verification\n\nTests pass",
+            "base": {
+              "ref": "main",
+              "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "repo": {
+                "full_name": "owner/repo"
+              }
+            },
+            "head": {
+              "sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            },
+            "mergeable": true,
+            "mergeable_state": "clean"
+          }
+        ],
+        [
+          {
+            "name": "pr-template",
+            "state": "SUCCESS"
+          }
+        ],
+        null
+      ],
+      "assert": {
+        "op": "equal",
+        "value": "CONTINUE_DRAFT"
+      }
+    },
+    {
+      "name": "pr_dirty",
+      "function": "first_action",
+      "args": [
+        "owner/repo",
+        [
+          {
+            "number": 1,
+            "title": "Work",
+            "state": "open",
+            "body": "### Work type\n\nImplementation\n\n### Objective\n\nX\n\n### Scope\n\n#### Constraints\n\n- X only\n\n#### Actions\n\n- Implement X\n\n### Acceptance criteria\n\nX passes"
+          }
+        ],
+        [
+          {
+            "number": 2,
+            "title": "Change",
+            "state": "open",
+            "draft": false,
+            "body": "### Work\n\nRefs #1\n\n### Changes\n\nX\n\n### Verification\n\nTests pass",
+            "base": {
+              "ref": "main",
+              "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "repo": {
+                "full_name": "owner/repo"
+              }
+            },
+            "head": {
+              "sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            },
+            "mergeable": false,
+            "mergeable_state": "dirty"
+          }
+        ],
+        [
+          {
+            "name": "pr-template",
+            "state": "SUCCESS"
+          }
+        ],
+        null
+      ],
+      "assert": {
+        "op": "equal",
+        "value": "UPDATE_BRANCH"
+      }
+    },
+    {
+      "name": "pr_blocked",
+      "function": "first_action",
+      "args": [
+        "owner/repo",
+        [
+          {
+            "number": 1,
+            "title": "Work",
+            "state": "open",
+            "body": "### Work type\n\nImplementation\n\n### Objective\n\nX\n\n### Scope\n\n#### Constraints\n\n- X only\n\n#### Actions\n\n- Implement X\n\n### Acceptance criteria\n\nX passes"
+          }
+        ],
+        [
+          {
+            "number": 2,
+            "title": "Change",
+            "state": "open",
+            "draft": false,
+            "body": "### Work\n\nRefs #1\n\n### Changes\n\nX\n\n### Verification\n\nTests pass",
+            "base": {
+              "ref": "main",
+              "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "repo": {
+                "full_name": "owner/repo"
+              }
+            },
+            "head": {
+              "sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            },
+            "mergeable": true,
+            "mergeable_state": "blocked"
+          }
+        ],
+        [
+          {
+            "name": "pr-template",
+            "state": "SUCCESS"
+          }
+        ],
+        null
+      ],
+      "assert": {
+        "op": "equal",
+        "value": "WAIT_MERGE_GATE"
+      }
+    },
+    {
+      "name": "pr_changed_detail",
+      "function": "first_action",
+      "args": [
+        "owner/repo",
+        [
+          {
+            "number": 1,
+            "title": "Work",
+            "state": "open",
+            "body": "### Work type\n\nImplementation\n\n### Objective\n\nX\n\n### Scope\n\n#### Constraints\n\n- X only\n\n#### Actions\n\n- Implement X\n\n### Acceptance criteria\n\nX passes"
+          }
+        ],
+        [
+          {
+            "number": 2,
+            "title": "Change",
+            "state": "open",
+            "draft": false,
+            "body": "### Work\n\nRefs #1\n\n### Changes\n\nX\n\n### Verification\n\nTests pass",
+            "base": {
+              "ref": "main",
+              "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "repo": {
+                "full_name": "owner/repo"
+              }
+            },
+            "head": {
+              "sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            },
+            "mergeable": true,
+            "mergeable_state": "clean"
+          }
+        ],
+        [
+          {
+            "name": "pr-template",
+            "state": "SUCCESS"
+          }
+        ],
+        {
+          "number": 2,
+          "title": "Change",
+          "state": "open",
+          "draft": false,
+          "body": "changed",
+          "base": {
+            "ref": "main",
+            "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "repo": {
+              "full_name": "owner/repo"
+            }
+          },
+          "head": {
+            "sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          },
+          "mergeable": true,
+          "mergeable_state": "clean"
+        }
+      ],
+      "assert": {
+        "op": "equal",
+        "value": "REFRESH_STATE"
+      }
+    },
+    {
+      "name": "invalid_issue",
+      "function": "first_action",
+      "args": [
+        "owner/repo",
+        [
+          {
+            "number": 1,
+            "title": "Work",
+            "state": "open",
+            "body": ""
+          }
+        ],
+        [],
+        [
+          {
+            "name": "pr-template",
+            "state": "SUCCESS"
+          }
+        ],
+        null
+      ],
+      "assert": {
+        "op": "equal",
+        "value": "FIX_WORK_CONTRACT"
+      }
+    },
+    {
+      "name": "invalid_pr",
+      "function": "first_action",
+      "args": [
+        "owner/repo",
+        [
+          {
+            "number": 1,
+            "title": "Work",
+            "state": "open",
+            "body": "### Work type\n\nImplementation\n\n### Objective\n\nX\n\n### Scope\n\n#### Constraints\n\n- X only\n\n#### Actions\n\n- Implement X\n\n### Acceptance criteria\n\nX passes"
+          }
+        ],
+        [
+          {
+            "number": 2,
+            "title": "Change",
+            "state": "open",
+            "draft": false,
+            "body": "### Work\n\nRefs #1",
+            "base": {
+              "ref": "main",
+              "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "repo": {
+                "full_name": "owner/repo"
+              }
+            },
+            "head": {
+              "sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            },
+            "mergeable": true,
+            "mergeable_state": "clean"
+          }
+        ],
+        [
+          {
+            "name": "pr-template",
+            "state": "SUCCESS"
+          }
+        ],
+        null
+      ],
+      "assert": {
+        "op": "equal",
+        "value": "FIX_PR_CONTRACT"
+      }
+    },
+    {
+      "name": "orphan_action",
+      "function": "orphan_action",
+      "args": [
+        "owner/repo",
+        [
+          {
+            "number": 1,
+            "title": "Work",
+            "state": "open",
+            "body": "### Work type\n\nImplementation\n\n### Objective\n\nX\n\n### Scope\n\n#### Constraints\n\n- X only\n\n#### Actions\n\n- Implement X\n\n### Acceptance criteria\n\nX passes"
+          }
+        ],
+        [
+          {
+            "number": 2,
+            "title": "Change",
+            "state": "open",
+            "draft": false,
+            "body": "### Work\n\nRefs #9\n\n### Changes\n\nX\n\n### Verification\n\nTests pass",
+            "base": {
+              "ref": "main",
+              "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "repo": {
+                "full_name": "owner/repo"
+              }
+            },
+            "head": {
+              "sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            },
+            "mergeable": true,
+            "mergeable_state": "clean"
+          }
+        ],
+        [
+          {
+            "name": "pr-template",
+            "state": "SUCCESS"
+          }
+        ]
+      ],
+      "assert": {
+        "op": "equal",
+        "value": "FIX_WORK_REFERENCE"
+      }
+    },
+    {
+      "name": "orphan_number",
+      "function": "orphan_number",
+      "args": [
+        "owner/repo",
+        [],
+        [
+          {
+            "number": 2,
+            "title": "Change",
+            "state": "open",
+            "draft": false,
+            "body": "### Work\n\nRefs #1\n\n### Changes\n\nX\n\n### Verification\n\nTests pass",
+            "base": {
+              "ref": "main",
+              "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "repo": {
+                "full_name": "owner/repo"
+              }
+            },
+            "head": {
+              "sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            },
+            "mergeable": true,
+            "mergeable_state": "clean"
+          }
+        ],
+        [
+          {
+            "name": "pr-template",
+            "state": "SUCCESS"
+          }
+        ]
+      ],
+      "assert": {
+        "op": "equal",
+        "value": 2
+      }
+    }
+  ]
+}
