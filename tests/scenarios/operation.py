@@ -246,3 +246,130 @@ class CommentRequestTests(unittest.TestCase):
             self.assertEqual(result["request"], {"run": 99, "attempt": 1, "base": self.sha, "actor": "owner"})
             self.assertNotIn("pr", inputs)
             self.assertNotIn("head", inputs)
+
+
+    def test_refresh_readiness_uses_current_head_and_fresh_run(self):
+        from controller import review
+        identity = self.identity()
+        head = "b"*40
+        created = "2026-01-01T00:00:00Z"
+        stamp = "2026-01-01T00:00:05Z"
+        status = {"context": "grade-b", "state": "success", "created_at": stamp,
+                  "target_url": "https://github.com/owner/repo/actions/runs/100"}
+        run = {"id": 100, "path": ".github/workflows/grade-b.yml", "event": "issue_comment",
+               "head_sha": self.sha, "head_branch": "main", "created_at": created,
+               "status": "completed", "conclusion": "success"}
+        combined = {"sha": head, "statuses": [status]}
+        with patch.object(review, "api", side_effect=[combined, run]) as read:
+            result = review.refresh_ready(self.repo, identity, head, created)
+            self.assertEqual(result["run"], 100)
+            self.assertEqual(read.call_count, 2)
+            read.assert_any_call("repos/owner/repo/commits/" + head + "/status")
+            read.assert_any_call("repos/owner/repo/actions/runs/100")
+        for entry in (dict(status, state="pending"), dict(status, created_at="2025-12-31T23:59:59Z")):
+            with patch.object(review, "api", return_value=dict(combined, statuses=[entry])):
+                self.assertIsNone(review.refresh_ready(self.repo, identity, head, created))
+        for other in (dict(run, event="issues"), dict(run, head_sha="c"*40),
+                      dict(run, created_at="2025-12-31T23:59:59Z"), dict(run, status="in_progress")):
+            with patch.object(review, "api", side_effect=[combined, other]):
+                self.assertIsNone(review.refresh_ready(self.repo, identity, head, created))
+        for invalid in (dict(combined, sha="c"*40), dict(combined, statuses=[]),
+                        dict(combined, statuses=[status, status]), dict(combined, statuses=[dict(status, state="failure")]),
+                        dict(combined, statuses=[dict(status, target_url="https://example.com")])):
+            with patch.object(review, "api", return_value=invalid), self.assertRaises(ValueError):
+                review.refresh_ready(self.repo, identity, head, created)
+        with patch.object(review, "api", side_effect=[combined, dict(run, conclusion="failure")]):
+            with self.assertRaises(ValueError):
+                review.refresh_ready(self.repo, identity, head, created)
+        with patch.object(review, "api", side_effect=RuntimeError("API unavailable")):
+            with self.assertRaises(RuntimeError):
+                review.refresh_ready(self.repo, identity, head, created)
+
+    def test_wait_merge_refresh_bounded_and_fail_closed(self):
+        from controller import review
+        from validation import approval, merge
+        from validation.model import digest
+        identity = self.identity()
+        head = "b"*40
+        data = {"work": 4, "base": self.sha, "head": head}
+        args = (self.repo, identity, 5, digest(data), head, self.comment["created_at"])
+        clean = {"mergeable": True, "mergeable_state": "clean"}
+        blocked = dict(clean, mergeable_state="blocked")
+        allowed = {"allowed": True, "state": "APPROVED", "label_event_id": 7}
+        ready = {"run": 100}
+        with patch.object(review, "current_main"), patch.object(review.time, "sleep") as sleep, \
+                patch.object(review.time, "monotonic", side_effect=[0, 3, 4, 6, 7]) as clock, \
+                patch.object(approval, "inspect_pr", return_value=allowed), \
+                patch.object(merge, "read_snapshot", side_effect=[(data, blocked), (data, clean)]), \
+                patch.object(review, "refresh_ready", side_effect=[None, ready]) as status, \
+                patch.object(merge, "merge_approved") as write:
+            self.assertEqual(review.wait_merge_refresh(*args), ready)
+            self.assertEqual(status.call_count, 2)
+            self.assertEqual(sleep.call_count, 2)
+            write.assert_not_called()
+        with patch.object(review, "current_main"), patch.object(review.time, "sleep"), \
+                patch.object(review.time, "monotonic", side_effect=[0, 91]), \
+                patch.object(approval, "inspect_pr", return_value=allowed), \
+                patch.object(merge, "read_snapshot") as snapshot:
+            with self.assertRaisesRegex(ValueError, "Timed out"):
+                review.wait_merge_refresh(*args)
+            snapshot.assert_not_called()
+        for bad in (dict(data, head="c"*40), dict(data, base="c"*40), dict(data, work=99)):
+            with patch.object(review, "current_main"), patch.object(review.time, "sleep"), \
+                    patch.object(approval, "inspect_pr", return_value=allowed), \
+                    patch.object(merge, "read_snapshot", return_value=(bad, clean)), \
+                    patch.object(review, "refresh_ready") as status:
+                with self.assertRaises(ValueError):
+                    review.wait_merge_refresh(*args)
+                status.assert_not_called()
+        with patch.object(review, "current_main", side_effect=ValueError("stale main")), \
+                patch.object(approval, "inspect_pr") as approve:
+            with self.assertRaises(ValueError):
+                review.wait_merge_refresh(*args)
+            approve.assert_not_called()
+        for changed in ({"allowed": False, "reason": "revoked"}, dict(allowed, label_event_id=8)):
+            with patch.object(review, "current_main"), patch.object(review.time, "sleep"), \
+                    patch.object(approval, "inspect_pr", side_effect=[allowed, changed]), \
+                    patch.object(merge, "read_snapshot", return_value=(data, clean)), \
+                    patch.object(review, "refresh_ready", return_value=ready):
+                with self.assertRaisesRegex(ValueError, "Approval changed"):
+                    review.wait_merge_refresh(*args)
+
+    def test_merge_comment_wait_then_full_verifier(self):
+        from controller import review
+        from validation import merge
+        from validation.model import digest
+        identity = self.identity()
+        data = {"work": 4, "base": self.sha, "head": "b"*40}
+        command = "/review merge verify 5 " + digest(data) + " " + data["head"]
+        event = self.event()
+        event["comment"]["body"] = command
+        with patch.object(operation, "event_context", return_value=(event, self.sha, "owner", 99, 1)), \
+                patch.object(operation, "request_identity", return_value=identity) as request, \
+                patch.object(review, "wait_merge_refresh", return_value={"run": 100}) as wait, \
+                patch.object(review, "current_main"), \
+                patch.object(merge, "verify_full", return_value=data) as full, \
+                patch.object(merge, "merge_approved") as write:
+            result = review.comment_request(self.repo)
+            self.assertEqual(result["state"], "VERIFIED")
+            self.assertEqual(result["refresh"], {"run": 100})
+            self.assertIsNone(result["execution"])
+            wait.assert_called_once_with(self.repo, identity, 5, digest(data), data["head"], self.comment["created_at"])
+            self.assertEqual(request.call_count, 2)
+            full.assert_called_once_with(self.repo, 5, digest(data), data["head"], expected_work=4)
+            write.assert_not_called()
+            full.reset_mock()
+            wait.side_effect = ValueError("pending timeout")
+            with self.assertRaises(ValueError):
+                review.comment_request(self.repo)
+            full.assert_not_called()
+            wait.side_effect = None
+            request.side_effect = [identity, ValueError("request edited")]
+            with self.assertRaises(ValueError):
+                review.comment_request(self.repo)
+            full.assert_not_called()
+            request.side_effect = None
+            full.side_effect = ValueError("required check failed")
+            with self.assertRaises(ValueError):
+                review.comment_request(self.repo)
+            write.assert_not_called()
