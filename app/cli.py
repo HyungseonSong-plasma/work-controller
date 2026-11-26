@@ -200,7 +200,14 @@ def executor_command(argv):
     return int(result["state"] not in {"READY", "PUBLISHED"})
 
 
-COMMANDS = {"executor": executor_command, "approval": approval_command, "authority": authority_command, "issue": issue_command, "pr": pr_command, "merge": merge_command,
+def executor_live_ci_command(argv):
+    parser = argparse.ArgumentParser(prog="executor-live-ci")
+    parser.parse_args(argv)
+    executor.live_ci()
+    return 0
+
+
+COMMANDS = {"executor-live-ci": executor_live_ci_command, "executor": executor_command, "approval": approval_command, "authority": authority_command, "issue": issue_command, "pr": pr_command, "merge": merge_command,
             "completion": completion_command, "controller": controller_command}
 MODULES = {"executor": executor, "approval": approval, "authority": authority, "issue": issue, "pr": pr, "merge": merge, "completion": completion,
            "controller": decision_engine}

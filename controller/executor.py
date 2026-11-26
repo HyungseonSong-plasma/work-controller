@@ -1,6 +1,8 @@
 """Bounded Work Unit publisher. No shell tasks, force pushes, merge or completion."""
+import base64
 import hashlib
 import json
+import os
 import subprocess
 import unittest
 from unittest.mock import patch
@@ -175,6 +177,101 @@ def run(repo, work, plan, execute=False, reviewed_digest=None):
                 "phase": phase, "branch": branch, "commit": commit, "reason": str(exc),
                 "partial_write_possible": phase != "preflight",
                 "retry": "Inspect repository and obtain fresh review before any retry"}
+
+
+
+def live_ci():
+    """Explicit trusted-main integration test; never invoked by unit test discovery."""
+    repo = os.environ["GITHUB_REPOSITORY"]
+    if os.environ.get("GITHUB_ACTIONS") != "true" or os.environ.get("GITHUB_EVENT_NAME") != "workflow_dispatch" or os.environ.get("GITHUB_REF") != "refs/heads/main":
+        raise ValueError("Live CI requires a manual GitHub Actions run on main")
+    checked_out = subprocess.run(["git", "rev-parse", "HEAD"], check=True, capture_output=True, text=True).stdout.strip()
+    if checked_out != os.environ["GITHUB_SHA"] or checked_out != api(f"repos/{repo}/branches/main")["commit"]["sha"]:
+        raise ValueError("Live CI checkout is not current trusted main")
+    run_id = os.environ["GITHUB_RUN_ID"] + "-" + os.environ["GITHUB_RUN_ATTEMPT"]
+    root = f"repos/{repo}"
+    summary = os.environ["GITHUB_STEP_SUMMARY"]
+
+    def note(message):
+        print(message, flush=True)
+        with open(summary, "a", encoding="utf-8") as stream:
+            stream.write(message + "\n\n")
+
+    def require(condition, message):
+        if not condition:
+            raise RuntimeError(message)
+
+    def invoke(work, plan, *args):
+        output = subprocess.run(
+            ["python3", "-m", "app.cli", "executor", "--repo", repo,
+             "--work", str(work), "--plan", "-", *args],
+            input=json.dumps(plan), text=True, capture_output=True
+        )
+        print(output.stdout, flush=True)
+        if output.stderr:
+            print(output.stderr, flush=True)
+        require(output.returncode == 0, "Executor failed; inspect its output before retry")
+        return json.loads(output.stdout)
+
+    path = f"executor-ci-fixture-{run_id}.txt"
+    text = f"Disposable Executor integration fixture {run_id}. Do not merge.\n"
+    base = api(f"{root}/branches/main")["commit"]["sha"]
+    policy = authority.read_policy(repo, base)
+    require(authority.classify(policy, [path])["grade"] == "C", "Fixture path is not C-grade")
+    issue = api(f"{root}/issues", "-X", "POST", "-f", f"title=[TEST] Executor CI {run_id}",
+                "-f", "body=### Work type\n\nImplementation\n\n### Objective\n\nVerify the real Executor publication path.\n\n### Scope\n\nCreate only the disposable C-grade fixture " + path + ". Do not merge.\n\n### Acceptance criteria\n\nVerify dry-run, publication and cleanup without merging.")
+    work = issue["number"]
+    note(f"Fixture Work: #{work}")
+    plan = {"title": f"[TEST] Executor CI {run_id} — do not merge",
+            "body": f"### Work\n\nRefs #{work}\n\n### Changes\n\nCreate one disposable C-grade text fixture; do not merge.\n\n### Verification\n\nVerify publication and cleanup in Executor live CI.",
+            "files": [{"path": path, "content": text}]}
+
+    try:
+        dry = invoke(work, plan)
+        require(dry["state"] == "READY" and dry["grade"] == "C" and dry["executed"] is False,
+                "Dry-run did not return READY for C")
+        digest = dry["plan_digest"]
+        expected_branch = f"work/{work}-{digest[:16]}"
+        require(not api(f"{root}/git/matching-refs/heads/{expected_branch}"), "Dry-run published a branch")
+        require(not pages(f"{root}/pulls?state=all&head={repo.split('/')[0]}:{expected_branch}&per_page=100"),
+                "Dry-run published a PR")
+        note("PASS: C-only dry-run; no branch or PR was published.")
+        result = invoke(work, plan, "--execute", "--reviewed-plan", digest)
+        require(result["state"] == "PUBLISHED" and result["executed"] is True,
+                "Expected a published Work Unit")
+        number, branch, commit = result["pr"], result["branch"], result["commit"]
+        note(f"Published PR #{number}, branch {branch}, commit {commit}")
+        pr = api(f"{root}/pulls/{number}")
+        require(branch == expected_branch and pr["state"] == "open" and pr["merged"] is False
+                and pr["head"]["ref"] == branch and pr["head"]["sha"] == commit
+                and pr["base"]["ref"] == "main" and pr["base"]["sha"] == dry["base"]
+                and pr["body"] == plan["body"], "Published PR does not match reviewed plan")
+        ref = api(f"{root}/git/ref/heads/{branch}")
+        require(ref["object"]["sha"] == commit, "Published branch differs from expected commit")
+        files = pages(f"{root}/pulls/{number}/files?per_page=100")
+        require(pr["changed_files"] == 1 and len(files) == 1
+                and files[0]["filename"] == path and files[0]["status"] == "added",
+                "Published file scope differs from plan")
+        blob = api(f"{root}/contents/{path}?ref={commit}")
+        require(base64.b64decode(blob["content"]).decode("utf-8") == text,
+                "Published bytes differ from plan")
+        note("PASS: actual branch, commit, canonical PR, exact changed path and file contents verified.")
+
+        closed = api(f"{root}/pulls/{number}", "-X", "PATCH", "-f", "state=closed")
+        require(closed["state"] == "closed" and closed["merged"] is False,
+                "Fixture PR was not closed unmerged")
+        current = api(f"{root}/git/ref/heads/{branch}")
+        require(current["object"]["sha"] == commit, "Branch changed; do not delete")
+        subprocess.run(["gh", "api", "--hostname", "github.com",
+                        f"{root}/git/refs/heads/{branch}", "-X", "DELETE"], check=True)
+        require(not api(f"{root}/git/matching-refs/heads/{branch}"), "Fixture branch still exists")
+        closed_work = api(f"{root}/issues/{work}", "-X", "PATCH", "-f", "state=closed",
+                          "-f", "state_reason=not_planned")
+        require(closed_work["state"] == "closed", "Fixture Work still open")
+        note("PASS: fixture PR closed unmerged, branch removed, fixture Work closed as not planned.")
+    except Exception:
+        note(f"HUMAN_REVIEW: inspect fixture Work #{work} and this run's output; partial artifacts may remain. No automatic retry or merge.")
+        raise
 
 
 class ExecutorTests(unittest.TestCase):
