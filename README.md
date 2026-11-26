@@ -179,11 +179,11 @@ Dry-run performs no writes. Explicit execution requires a fresh reviewed plan di
 
 ## Controller workflow convention
 
-Keep existing workflow filenames. Workflow YAML under `.github/workflows/` defines triggers, permissions, runner configuration and module invocation only for Controller workflows. Executor live CI is implemented in `controller/executor.py` and explicitly invoked by `python3 -m app.cli executor-live-ci` on trusted main via `executor-ci.yml` (workflow_dispatch). It creates and verifies one disposable C-only Work Unit and cleans up without merging; partial failures require human review. The repository must allow Actions to create pull requests. The test verifies publication, not downstream checks, which may be suppressed or require approval for token-created PRs. Ordinary `test executor` does not invoke live CI. Future `controller-run.yml` will invoke `controller/operation.py`; the operational contract and scheduling are not implemented by this refactor.
+Keep existing workflow filenames. Workflow YAML under `.github/workflows/` defines triggers, permissions, runner configuration and module invocation only for Controller workflows. Executor live CI is implemented in `controller/executor.py` and explicitly invoked by `python3 -m app.cli executor-live-ci` on trusted main via `executor-ci.yml` (workflow_dispatch). It creates and verifies one disposable C-only Work Unit and cleans up without merging; partial failures require human review. The repository must allow Actions to create pull requests. The test verifies publication, not downstream checks, which may be suppressed or require approval for token-created PRs. Ordinary `test executor` does not invoke live CI. `controller-run.yml` invokes `controller/operation.py` for read-only discovery.
 
 ## Controller Operation v0.1
 
-`controller/operation.py` connects one Decision Engine discovery cycle to the existing Executor, with no new approval or persistent state. The default is reporting only. The trusted-main `controller-run.yml` is manually dispatched and read-only; its job summary groups existing decisions by Action, Wait, and Human Review and links to Work or PR. A blocked Work does not suppress unrelated decisions. Global discovery failure stops dispatch. The summary is a view of the existing decision report, not another task database.
+`controller/operation.py` connects one Decision Engine discovery cycle to the existing Executor, with no new approval or persistent state. The default is reporting only. The trusted-main `controller-run.yml` supports manual dispatch and validated Issue comment requests, and is read-only; its job summary groups existing decisions by Action, Wait, and Human Review and links to Work or PR. A blocked Work does not suppress unrelated decisions. Global discovery failure stops dispatch. The summary is a view of the existing decision report, not another task database.
 
 ```sh
 python3 -m app.cli operation --repo OWNER/REPO
@@ -192,4 +192,18 @@ python3 -m app.cli operation --repo OWNER/REPO --work NUMBER --plan plan.json --
 python3 -m app.cli test operation
 ```
 
-Explicit plan dispatch requires exactly one current Implementation PLAN_WORK decision for the target Work and no ambiguous PR reference to it. Executor rechecks its existing authority and reviewed-plan contract; no plan is generated automatically. The manual workflow does not accept a plan and cannot publish changes. Scheduling, agent integration, existing PR modifications, automatic merge and closure are not implemented. No automatic retry after failure. A future Work may enable an hourly schedule or a separately authorized execution integration after the reporting cycle is verified.
+Explicit plan dispatch requires exactly one current Implementation PLAN_WORK decision for the target Work and no ambiguous PR reference to it. Executor rechecks its existing authority and reviewed-plan contract; no plan is generated automatically. The workflow does not accept a plan and cannot publish changes. Automatic plan generation, scheduled execution integration, existing PR modifications, automatic merge and closure are not implemented. No automatic retry after failure. A future Work may enable an hourly schedule or a separately authorized execution integration after the reporting cycle is verified.
+
+### Scheduled Agent read-only request
+
+On an open canonical Work Issue, the FileRank policy owner (including the connected Agent acting as that account) can create a comment consisting exactly of:
+
+```text
+/controller run
+```
+
+The trusted-main workflow listens only to created issue comments; non-command comments and PR comments skip the operation job. The CLI rechecks the immutable checkout against current main, owner identity, current Issue validity and current comment body, author, membership and timestamps before calling the existing reporting cycle. The comment cannot supply a plan, command arguments or a shell command. Job permissions are read-only, and the workflow does not write back to Issues.
+
+Find Controller run workflow runs with event `issue_comment`, then inspect the operation job JSON or summary. Match the `request` fields (Work, comment ID, run ID, attempt and base SHA) to the submitted comment, and require a successful job with REPORTED and execution null before using its discovery. The report still covers all Works; the Agent processes only its own Work. Do not use historical or unmatched results. Non-command events may appear as skipped workflow runs.
+
+Owner login does not distinguish a human from the Agent using the same account. This is not a write authorization or an Executor interface. A queued run can fail if main advances, a request is changed or an Issue closes; a concurrent update after rechecking remains possible. GitHub concurrency serializes running jobs but can replace pending jobs, and reruns can repeat a read-only request. No exactly-once delivery, persisted request registry or automatic retry is provided. Inspect missing or failed runs rather than blindly reposting.

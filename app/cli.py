@@ -215,9 +215,12 @@ def operation_command(argv):
     parser.add_argument("--execute", action="store_true")
     parser.add_argument("--reviewed-plan")
     parser.add_argument("--summary", action="store_true", help="Write GitHub Actions step summary")
+    parser.add_argument("--comment-request", action="store_true", help="Validate a read-only Actions issue_comment request")
     args = parser.parse_args(argv)
     if bool(args.plan) != (args.work is not None) or args.execute != bool(args.reviewed_plan) or (args.execute and not args.plan):
         parser.error("Work and plan are paired; execute requires a reviewed plan digest")
+    if args.comment_request and (args.plan or args.work is not None or args.execute or args.reviewed_plan):
+        parser.error("Comment requests are read-only and cannot supply a plan")
     plan = None
     if args.plan == "-":
         plan = json.load(sys.stdin)
@@ -226,7 +229,10 @@ def operation_command(argv):
             plan = json.load(stream)
     if args.plan and not isinstance(plan, dict):
         parser.error("Plan must be a JSON object")
-    result = operation.run(args.repo, args.work, plan, args.execute, args.reviewed_plan)
+    if args.comment_request:
+        result = operation.comment_request(args.repo)
+    else:
+        result = operation.run(args.repo, args.work, plan, args.execute, args.reviewed_plan)
     print(json.dumps(result, indent=2, ensure_ascii=False))
     if args.summary:
         with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as stream:
