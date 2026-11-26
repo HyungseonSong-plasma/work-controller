@@ -181,3 +181,68 @@ class CommentRequestTests(unittest.TestCase):
                 review.execute(self.repo, verified, dict(args, action="merge", pr="5", head="bad"))
             write.assert_not_called()
             close.assert_not_called()
+
+
+    def test_dispatch_optional_inputs_and_action_specific_requirements(self):
+        from controller import review
+        from validation import merge, completion
+        identity = {"run": 99, "attempt": 1, "base": self.sha, "actor": "owner"}
+        close = {"action": "close", "work": "4", "snapshot": "a"*64, "evidence": "Reviewed"}
+        merge_args = {"action": "merge", "work": "4", "snapshot": "a"*64, "pr": "5", "head": "b"*40}
+        merged = {"merged": True, "merge_commit_sha": "c"*40,
+                  "head": {"sha": "b"*40}, "base": {"ref": "main", "repo": {"full_name": self.repo}}}
+        with patch.object(review, "current_main"), patch.object(review, "api") as api, \
+                patch.object(completion, "approved_close") as close_write, \
+                patch.object(merge, "read_snapshot", return_value=({"work": 4, "base": self.sha}, {})), \
+                patch.object(merge, "merge_approved", return_value={"sha": "c"*40}) as merge_write:
+            api.return_value = {"state": "closed", "state_reason": "completed"}
+            for args in (close, dict(close, pr=""), dict(close, head=""), dict(close, pr="", head="")):
+                with self.subTest(close=args):
+                    close_write.reset_mock()
+                    self.assertEqual(review.execute(self.repo, identity, args)["state"], "CLOSED")
+                    close_write.assert_called_once_with(self.repo, 4, "a"*64, "Reviewed", close=True)
+            merge_write.assert_not_called()
+            close_write.reset_mock()
+            api.return_value = merged
+            for args in (merge_args, dict(merge_args, evidence="")):
+                with self.subTest(merge=args):
+                    merge_write.reset_mock()
+                    self.assertEqual(review.execute(self.repo, identity, args)["state"], "MERGED")
+                    merge_write.assert_called_once_with(self.repo, 5, "a"*64, "b"*40, expected_work=4)
+            close_write.assert_not_called()
+            merge_write.reset_mock()
+            close_write.reset_mock()
+            api.reset_mock()
+            invalid = [None, [], "", dict(close, unknown=""), dict(close, evidence=None),
+                       dict(close, work=4), dict(close, pr="5"), dict(close, head="b"*40),
+                       dict(close, evidence=" "), dict(merge_args, evidence="not allowed"),
+                       dict(merge_args, pr="0"), dict(merge_args, head=""), dict(close, action="other"),
+                       dict(close, snapshot="bad")]
+            invalid.extend({k: v for k, v in close.items() if k != missing}
+                           for missing in ("action", "work", "snapshot", "evidence"))
+            invalid.extend({k: v for k, v in merge_args.items() if k != missing}
+                           for missing in ("pr", "head"))
+            for args in invalid:
+                with self.subTest(invalid=args), self.assertRaises(ValueError):
+                    review.execute(self.repo, identity, args)
+            close_write.assert_not_called()
+            merge_write.assert_not_called()
+            api.assert_not_called()
+
+    def test_execute_request_accepts_omitted_optional_inputs(self):
+        from controller import review
+        from validation import completion
+        inputs = {"action": "close", "work": "4", "snapshot": "a"*64, "evidence": "Reviewed"}
+        event = {"repository": {"full_name": self.repo}, "ref": "main", "sender": self.user, "inputs": inputs}
+        with patch.object(operation, "event_context", return_value=(event, self.sha, "owner", 99, 1)) as context, \
+                patch.object(review, "current_main"), patch.object(authority, "read_policy", return_value={"owner": "owner"}), \
+                patch.dict(os.environ, {"GITHUB_TRIGGERING_ACTOR": "owner"}), \
+                patch.object(completion, "approved_close") as close, \
+                patch.object(review, "api", return_value={"state": "closed", "state_reason": "completed"}):
+            result = review.execute_request(self.repo)
+            context.assert_called_once_with(self.repo, "workflow_dispatch")
+            close.assert_called_once_with(self.repo, 4, "a"*64, "Reviewed", close=True)
+            self.assertEqual(result["state"], "CLOSED")
+            self.assertEqual(result["request"], {"run": 99, "attempt": 1, "base": self.sha, "actor": "owner"})
+            self.assertNotIn("pr", inputs)
+            self.assertNotIn("head", inputs)
