@@ -11,7 +11,23 @@ Issue-based work management and PR-based work-unit orchestration
 
 Run all unit tests using `python3 -m app.cli test`.
 
-Run `python3 -m app.cli test issue` to test the Work issue validator.
+Run `python3 -m app.cli test issue` to test the Work issue validator and shared test registration contract.
+
+### Validation test registration
+
+Use the shared `TestClass` from `validation/model.py` to create an isolated unittest class per module and register named cases:
+
+```python
+from .model import TestClass
+
+TestClass = TestClass.for_module(__name__)
+
+@TestClass.add("valid")
+def _(self):
+    self.assertTrue(validate(good))
+```
+
+Case names are identifiers, without the `test_` prefix; duplicate names are rejected. Registration attaches test functions without running them. Keep fixtures and helpers local to their module; assertions, mocks, runner and CLI remain standard unittest. Do not register on the shared base or use a global registry. `validation/authority.py` remains owner-managed and retains its existing unittest class until separately migrated.
 
 ## Work Issue format
 

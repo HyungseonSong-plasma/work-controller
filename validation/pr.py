@@ -1,8 +1,7 @@
 """Structural Work Unit contract; no external dependencies."""
 import re
-import unittest
 from .issue import validate as validate_issue, work_type
-from .model import PLACEHOLDERS, normalize, sections, without_comments
+from .model import TestClass, PLACEHOLDERS, normalize, sections, without_comments
 
 FIELDS = ("Work", "Changes", "Verification")
 REFERENCE = re.compile(r"Refs #[1-9][0-9]*")
@@ -44,44 +43,53 @@ def work_errors(number, issue):
     return []
 
 
-class ContractTests(unittest.TestCase):
-    good = "### Work\n\nRefs #12\n\n### Changes\n\nAdd X\n\n### Verification\n\nTests passed"
-
-    def test_valid(self):
-        self.assertEqual(errors(self.good), [])
-        self.assertEqual(errors(self.good.replace("\n", "\r\n")), [])
-
-    def test_empty_or_missing(self):
-        for body in (None, "", "free text", self.good.replace("Add X", ""), self.good.replace("### Changes", "### Other")):
-            self.assertTrue(errors(body))
-
-    def test_work_reference(self):
-        for value in ("Refs #", "Refs #0", "Refs #1 #2", "Closes #12", "Refs other/repo#12"):
-            self.assertTrue(errors(self.good.replace("Refs #12", value)))
-
-    def test_placeholders(self):
-        for value in ("TBD", "<!-- instructions -->", "   "):
-            self.assertTrue(errors(self.good.replace("Tests passed", value)))
-
-    def test_duplicate_or_reordered(self):
-        self.assertTrue(errors(self.good + "\n### Work\nRefs #13"))
-        self.assertTrue(errors(self.good.replace("### Work", "### Changes", 1)))
+TestClass = TestClass.for_module(__name__)
+TestClass.good = "### Work\n\nRefs #12\n\n### Changes\n\nAdd X\n\n### Verification\n\nTests passed"
 
 
-    def test_work_number(self):
-        self.assertEqual(work_number(self.good), 12)
-        self.assertEqual(work_number(self.good.replace("Refs #12", "<!-- ignored -->Refs #12")), 12)
-        for body in ("", self.good.replace("Refs #12", "Refs #12, #13")):
-            with self.assertRaises(ValueError):
-                work_number(body)
+@TestClass.add("valid")
+def _(self):
+    self.assertEqual(errors(self.good), [])
+    self.assertEqual(errors(self.good.replace("\n", "\r\n")), [])
 
-    def test_work_target(self):
-        issue = {"number": 12, "state": "open", "body": "### Work type\n\nImplementation\n\n### Objective\n\nX\n\n### Scope\n\n#### Constraints\n\n- X only\n\n#### Actions\n\n- Implement X\n\n### Acceptance criteria\n\nX passes"}
-        self.assertEqual(work_errors(12, issue), [])
-        for bad in (None, {}, dict(issue, number=13), dict(issue, state="closed"),
-                    dict(issue, pull_request={}), dict(issue, body=""), dict(issue, body=None)):
-            self.assertTrue(work_errors(12, bad))
+@TestClass.add("empty_or_missing")
+def _(self):
+    for body in (None, "", "free text", self.good.replace("Add X", ""), self.good.replace("### Changes", "### Other")):
+        self.assertTrue(errors(body))
 
-    def test_read_only_target(self):
-        issue = {"number": 12, "state": "open", "body": "### Work type\n\nRead-only\n\n### Objective\n\nX\n\n### Scope\n\n#### Constraints\n\n- X only\n\n#### Actions\n\n- Implement X\n\n### Acceptance criteria\n\nReport"}
-        self.assertEqual(work_errors(12, issue), ["Read-only Work must not have a PR"])
+@TestClass.add("work_reference")
+def _(self):
+    for value in ("Refs #", "Refs #0", "Refs #1 #2", "Closes #12", "Refs other/repo#12"):
+        self.assertTrue(errors(self.good.replace("Refs #12", value)))
+
+@TestClass.add("placeholders")
+def _(self):
+    for value in ("TBD", "<!-- instructions -->", "   "):
+        self.assertTrue(errors(self.good.replace("Tests passed", value)))
+
+@TestClass.add("duplicate_or_reordered")
+def _(self):
+    self.assertTrue(errors(self.good + "\n### Work\nRefs #13"))
+    self.assertTrue(errors(self.good.replace("### Work", "### Changes", 1)))
+
+
+@TestClass.add("work_number")
+def _(self):
+    self.assertEqual(work_number(self.good), 12)
+    self.assertEqual(work_number(self.good.replace("Refs #12", "<!-- ignored -->Refs #12")), 12)
+    for body in ("", self.good.replace("Refs #12", "Refs #12, #13")):
+        with self.assertRaises(ValueError):
+            work_number(body)
+
+@TestClass.add("work_target")
+def _(self):
+    issue = {"number": 12, "state": "open", "body": "### Work type\n\nImplementation\n\n### Objective\n\nX\n\n### Scope\n\n#### Constraints\n\n- X only\n\n#### Actions\n\n- Implement X\n\n### Acceptance criteria\n\nX passes"}
+    self.assertEqual(work_errors(12, issue), [])
+    for bad in (None, {}, dict(issue, number=13), dict(issue, state="closed"),
+                dict(issue, pull_request={}), dict(issue, body=""), dict(issue, body=None)):
+        self.assertTrue(work_errors(12, bad))
+
+@TestClass.add("read_only_target")
+def _(self):
+    issue = {"number": 12, "state": "open", "body": "### Work type\n\nRead-only\n\n### Objective\n\nX\n\n### Scope\n\n#### Constraints\n\n- X only\n\n#### Actions\n\n- Implement X\n\n### Acceptance criteria\n\nReport"}
+    self.assertEqual(work_errors(12, issue), ["Read-only Work must not have a PR"])

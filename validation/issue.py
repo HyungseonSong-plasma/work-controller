@@ -1,7 +1,8 @@
 """Canonical structural Work contract. No legacy format fallback."""
 import re
-import unittest
-from .model import ISSUE_HEADING, PLACEHOLDERS, normalize, sections, without_comments
+from types import ModuleType
+from unittest import TestLoader, TestResult
+from .model import TestClass, ISSUE_HEADING, PLACEHOLDERS, normalize, sections, without_comments
 
 FIELDS = ("Work type", "Objective", "Scope", "Acceptance criteria")
 TYPES = ("Implementation", "Read-only")
@@ -47,48 +48,126 @@ def validate(body):
     return True
 
 
-class ContractTests(unittest.TestCase):
-    scope = "#### Constraints\n\n- X only\n\n#### Actions\n\n- Implement X"
-    good = ("### Work type\n\nImplementation\n\n### Objective\n\nImplement X\n\n### Scope\n\n"
-            + scope + "\n\n### Acceptance criteria\n\n- X passes")
+TestClass = TestClass.for_module(__name__)
+TestClass.scope = "#### Constraints\n\n- X only\n\n#### Actions\n\n- Implement X"
+TestClass.good = ("### Work type\n\nImplementation\n\n### Objective\n\nImplement X\n\n### Scope\n\n"
+        + TestClass.scope + "\n\n### Acceptance criteria\n\n- X passes")
 
-    def test_valid(self):
-        self.assertTrue(validate(self.good))
-        self.assertTrue(validate(self.good.replace("\n", "\r\n")))
 
-    def test_empty_or_missing(self):
-        for body in (None, "", "free text", self.good.replace("X only", ""),
-                     self.good.replace("### Scope", "### Other"),
-                     self.good.replace("### Work type\n\nImplementation\n\n", ""),
-                     self.good.replace(self.scope, "X only")):
-            self.assertFalse(validate(body))
+@TestClass.add("valid")
+def _(self):
+    self.assertTrue(validate(self.good))
+    self.assertTrue(validate(self.good.replace("\n", "\r\n")))
 
-    def test_placeholders(self):
-        for placeholder in ("_No response_", "TBD", "TODO", "N/A", "<!-- instructions -->", "   ", "[ ]"):
-            self.assertFalse(validate(self.good.replace("X only", placeholder)))
-            self.assertFalse(validate(self.good.replace("- Implement X", "- " + placeholder)))
+@TestClass.add("empty_or_missing")
+def _(self):
+    for body in (None, "", "free text", self.good.replace("X only", ""),
+                 self.good.replace("### Scope", "### Other"),
+                 self.good.replace("### Work type\n\nImplementation\n\n", ""),
+                 self.good.replace(self.scope, "X only")):
+        self.assertFalse(validate(body))
 
-    def test_duplicate_or_reordered(self):
-        self.assertFalse(validate(self.good + "\n### Scope\nmore"))
-        self.assertFalse(validate(self.good.replace("### Objective", "### Scope", 1)))
+@TestClass.add("placeholders")
+def _(self):
+    for placeholder in ("_No response_", "TBD", "TODO", "N/A", "<!-- instructions -->", "   ", "[ ]"):
+        self.assertFalse(validate(self.good.replace("X only", placeholder)))
+        self.assertFalse(validate(self.good.replace("- Implement X", "- " + placeholder)))
 
-    def test_work_type(self):
-        for kind in TYPES:
-            body = self.good.replace("Implementation", kind, 1)
-            self.assertTrue(validate(body))
-            self.assertEqual(work_type(body), kind)
-        self.assertIsNone(work_type(self.good.replace("### Work type\n\nImplementation\n\n", "")))
-        self.assertFalse(validate(self.good.replace("Implementation", "Unknown", 1)))
+@TestClass.add("duplicate_or_reordered")
+def _(self):
+    self.assertFalse(validate(self.good + "\n### Scope\nmore"))
+    self.assertFalse(validate(self.good.replace("### Objective", "### Scope", 1)))
 
-    def test_malformed_scope(self):
-        for scope in (
-            "#### Constraints\n\n- X only",
-            "#### Actions\n\n- Implement X",
-            "#### Actions\n\n- Implement X\n\n#### Constraints\n\n- X only",
-            "#### Constraints\n\n- X only\n\n#### Constraints\n\n- X only\n\n#### Actions\n\n- Implement X",
-            "#### Constraints\n\n- X only\n\n#### Actions\n\n- Implement X\n\n#### Extra\n\n- X",
-            "Unexpected scope text\n\n" + self.scope,
-            self.scope.replace("#### Actions", "##### Actions"),
-        ):
-            with self.subTest(scope=scope):
-                self.assertFalse(validate(self.good.replace(self.scope, scope)))
+@TestClass.add("work_type")
+def _(self):
+    for kind in TYPES:
+        body = self.good.replace("Implementation", kind, 1)
+        self.assertTrue(validate(body))
+        self.assertEqual(work_type(body), kind)
+    self.assertIsNone(work_type(self.good.replace("### Work type\n\nImplementation\n\n", "")))
+    self.assertFalse(validate(self.good.replace("Implementation", "Unknown", 1)))
+
+@TestClass.add("malformed_scope")
+def _(self):
+    for scope in (
+        "#### Constraints\n\n- X only",
+        "#### Actions\n\n- Implement X",
+        "#### Actions\n\n- Implement X\n\n#### Constraints\n\n- X only",
+        "#### Constraints\n\n- X only\n\n#### Constraints\n\n- X only\n\n#### Actions\n\n- Implement X",
+        "#### Constraints\n\n- X only\n\n#### Actions\n\n- Implement X\n\n#### Extra\n\n- X",
+        "Unexpected scope text\n\n" + self.scope,
+        self.scope.replace("#### Actions", "##### Actions"),
+    ):
+        with self.subTest(scope=scope):
+            self.assertFalse(validate(self.good.replace(self.scope, scope)))
+
+
+
+@TestClass.add("registration_isolation")
+def _(self):
+    left = TestClass.for_module("test.left")
+    right = TestClass.for_module("test.right")
+
+    @left.add("same")
+    def _(case):
+        case.assertTrue(True)
+
+    @right.add("same")
+    def _(case):
+        case.assertFalse(False)
+
+    @left.add("left_only")
+    def _(case):
+        case.assertEqual(1, 1)
+
+    self.assertIsNot(left, right)
+    self.assertEqual(left.__module__, "test.left")
+    self.assertEqual(right.__module__, "test.right")
+    self.assertFalse(hasattr(right, "test_left_only"))
+    self.assertFalse(hasattr(TestClass, "test_left_only"))
+    self.assertIsNot(left.test_same, right.test_same)
+
+
+@TestClass.add("registration_invalid_names")
+def _(self):
+    local = TestClass.for_module("test.local")
+    for name in (None, 42, "", "with space", "with-dash", "1first"):
+        with self.subTest(name=name), self.assertRaises(ValueError):
+            local.add(name)
+    with self.assertRaises(TypeError):
+        local.add("not_function")(True)
+    self.assertFalse(hasattr(local, "test_not_function"))
+
+
+@TestClass.add("registration_duplicate")
+def _(self):
+    local = TestClass.for_module("test.local")
+
+    @local.add("same")
+    def original(case):
+        case.assertTrue(True)
+
+    with self.assertRaises(ValueError):
+        local.add("same")(lambda case: None)
+    self.assertIs(local.test_same, original)
+
+
+@TestClass.add("registration_discovery_and_deferred_execution")
+def _(self):
+    module = ModuleType("test.discovery")
+    module.TestClass = TestClass.for_module(module.__name__)
+    seen = []
+
+    @module.TestClass.add("deferred")
+    def _(case):
+        seen.append(case.id())
+        case.assertTrue(True)
+
+    self.assertEqual(seen, [])
+    suite = TestLoader().loadTestsFromModule(module)
+    self.assertEqual(suite.countTestCases(), 1)
+    result = TestResult()
+    suite.run(result)
+    self.assertTrue(result.wasSuccessful())
+    self.assertEqual(result.testsRun, 1)
+    self.assertEqual(seen, ["test.discovery.TestClass.test_deferred"])

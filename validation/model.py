@@ -3,6 +3,8 @@ import hashlib
 import json
 import re
 import subprocess
+import unittest
+from types import FunctionType
 
 SHA = re.compile(r"[0-9a-f]{40}")
 REPO = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")
@@ -38,3 +40,30 @@ def digest(data):
 
 def pages(path):
     return [item for page in api(path, "--paginate", "--slurp") for item in page]
+
+
+
+class TestClass(unittest.TestCase):
+    """Register ordinary unittest methods on an isolated module-local class."""
+
+    @staticmethod
+    def for_module(module):
+        return type("TestClass", (TestClass,), {"__module__": module})
+
+    @classmethod
+    def add(cls, name):
+        if cls is TestClass:
+            raise ValueError("Create a module-local TestClass before registration")
+        if not isinstance(name, str) or not name.isidentifier():
+            raise ValueError("Expected a test case identifier")
+        method = "test_" + name
+
+        def register(function):
+            if hasattr(cls, method):
+                raise ValueError(f"Duplicate test case: {name}")
+            if not isinstance(function, FunctionType):
+                raise TypeError("Expected a test function")
+            setattr(cls, method, function)
+            return function
+
+        return register
