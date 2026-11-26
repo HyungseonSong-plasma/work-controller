@@ -286,12 +286,12 @@ class WrapperTests(unittest.TestCase):
                 cases = list(suite)
                 actual_json = sum(type(t).__module__ == "tests." + name for t in cases)
                 self.assertGreaterEqual(actual_json, json_count)
-                scenarios = [t for t in cases if isinstance(t, unittest.TestSuite)]
-                actual_scenarios = sum(t.countTestCases() for t in scenarios)
+                scenarios = [t for t in cases if type(t).__module__ == "tests.scenarios." + name]
+                actual_scenarios = len(scenarios)
                 self.assertGreaterEqual(actual_scenarios, scenario_count)
                 self.assertEqual(suite.countTestCases(), actual_json + actual_scenarios)
                 if name == "operation":
-                    self.assertEqual({type(t).__name__ for s in scenarios for t in s},
+                    self.assertEqual({type(t).__name__ for t in scenarios},
                                      {"OperationTests", "CommentRequestTests"})
                 with contextlib.redirect_stderr(io.StringIO()) as output:
                     self.assertEqual(main(["test", name]), 0, output.getvalue())
