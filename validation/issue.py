@@ -1,22 +1,17 @@
 """Structural Work contract. No external dependencies."""
-import re
-import sys
 import unittest
+from .model import ISSUE_HEADING, PLACEHOLDERS, normalize, sections, without_comments
 
 FIELDS = ("Objective", "Scope", "Acceptance criteria")
-HEADING = re.compile(r"^### (.+?)\s*$", re.MULTILINE)
 
 
 def validate(body):
-    body = (body or "").replace("\r\n", "\n")
-    headings = list(HEADING.finditer(body))
-    if tuple(h.group(1) for h in headings) != FIELDS:
+    fields = sections(normalize(body), ISSUE_HEADING)
+    if tuple(name for name, _ in fields) != FIELDS:
         return False
-    for i, heading in enumerate(headings):
-        end = headings[i + 1].start() if i + 1 < len(headings) else len(body)
-        value = body[heading.end():end]
-        value = re.sub(r"<!--.*?-->", "", value, flags=re.S).strip()
-        if not value or value.casefold() in {"_no response_", "n/a", "tbd", "todo", "- [ ]"}:
+    for _, value in fields:
+        value = without_comments(value).strip()
+        if not value or value.casefold() in PLACEHOLDERS:
             return False
     return True
 
@@ -39,10 +34,3 @@ class ContractTests(unittest.TestCase):
     def test_duplicate_or_reordered(self):
         self.assertFalse(validate(self.good + "\n### Scope\nmore"))
         self.assertFalse(validate(self.good.replace("### Objective", "### Scope", 1)))
-
-
-if __name__ == "__main__":
-    if sys.argv[1:] == ["--test"]:
-        unittest.main(argv=[sys.argv[0]])
-    else:
-        sys.exit(0 if validate(sys.stdin.read()) else 1)

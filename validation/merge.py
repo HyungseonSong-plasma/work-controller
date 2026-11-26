@@ -1,23 +1,10 @@
 """Current-state merge preflight. Run from a trusted main checkout."""
-import argparse
-import hashlib
 import json
-import re
 import subprocess
-import sys
 import unittest
 from unittest.mock import patch
-from validate_pr import work_number, work_errors
-
-SHA = re.compile(r"[0-9a-f]{40}")
-REPO = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")
-
-
-def api(path, *args):
-    result = subprocess.run(["gh", "api", "--hostname", "github.com", path, *args],
-                            check=True, capture_output=True, text=True)
-    return json.loads(result.stdout)
-
+from .pr import work_number, work_errors
+from .model import SHA, api, digest
 
 def snapshot(pr, issue, repo, number):
     if pr.get("number") != number or pr.get("state") != "open" or pr.get("draft"):
@@ -37,11 +24,6 @@ def snapshot(pr, issue, repo, number):
         "work": work, "work_title": issue["title"], "work_body": issue["body"],
         "work_state": issue["state"],
     }
-
-
-def digest(data):
-    return hashlib.sha256(json.dumps(data, sort_keys=True, ensure_ascii=False,
-                                     separators=(",", ":")).encode()).hexdigest()
 
 
 def read_snapshot(repo, number):
@@ -116,43 +98,3 @@ class MergeTests(unittest.TestCase):
         with patch(__name__ + ".read_snapshot", side_effect=[(data, pr), (dict(data, work_title="new"), pr)]), patch("subprocess.run", return_value=checks):
             with self.assertRaises(ValueError):
                 verify(self.repo, 4, digest(data), data["head"])
-
-
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--repo", required=True)
-    parser.add_argument("--pr", required=True, type=int)
-    parser.add_argument("--approved-snapshot", help="Digest of metadata and code revision reviewed for scope and evidence")
-    parser.add_argument("--expected-head")
-    parser.add_argument("--merge", action="store_true", help="Explicitly request a squash merge after verification")
-    args = parser.parse_args()
-    if not REPO.fullmatch(args.repo) or args.pr < 1:
-        parser.error("Expected owner/repo and a positive PR number")
-    if not args.approved_snapshot:
-        if args.merge or args.expected_head:
-            parser.error("Merge/verification requires an approved snapshot and expected head")
-        data, _ = read_snapshot(args.repo, args.pr)
-        print(json.dumps({"snapshot": data, "review_digest": digest(data)}, indent=2, ensure_ascii=False))
-        return
-    if not args.expected_head or not SHA.fullmatch(args.expected_head):
-        parser.error("Verification requires --expected-head")
-    data = verify(args.repo, args.pr, args.approved_snapshot, args.expected_head)
-    if args.merge:
-        result = api(f"repos/{args.repo}/pulls/{args.pr}/merge", "-X", "PUT",
-                     "-f", f"sha={data['head']}", "-f", "merge_method=squash")
-        if result.get("merged") is not True:
-            raise ValueError("GitHub rejected merge")
-        print(json.dumps(result))
-    else:
-        print("Merge preflight passed for reviewed snapshot " + digest(data))
-
-
-if __name__ == "__main__":
-    if sys.argv[1:] == ["--test"]:
-        unittest.main(argv=[sys.argv[0]])
-    else:
-        try:
-            main()
-        except (ValueError, KeyError, TypeError, subprocess.CalledProcessError) as exc:
-            print(f"Merge contract failed: {exc}", file=sys.stderr)
-            sys.exit(1)

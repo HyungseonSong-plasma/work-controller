@@ -16,11 +16,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
-      - run: python3 validation/validate_pr.py --test
-      - run: python3 validation/validate_issue.py --test
-      - run: python3 validation/validate_merge.py --test
-      - run: python3 validation/validate_completion.py --test
-      - run: python3 controller.py --test
+      - run: python3 -m app.cli test
   pr-template:
     name: pr-template
     needs: candidate-tests
@@ -42,6 +38,12 @@ jobs:
         run: |
           set -euo pipefail
           gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq '.body // ""' > "$RUNNER_TEMP/pr-body.md"
-          WORK_NUMBER=$(python3 validation/validate_pr.py --work-number < "$RUNNER_TEMP/pr-body.md")
+          # Bootstrap compatibility for a base predating the unified CLI.
+          if [[ -f app/cli.py ]]; then
+            validator=(python3 -m app.cli pr)
+          else
+            validator=(python3 validation/validate_pr.py)
+          fi
+          WORK_NUMBER=$("${validator[@]}" --work-number < "$RUNNER_TEMP/pr-body.md")
           gh api "repos/$GITHUB_REPOSITORY/issues/$WORK_NUMBER" > "$RUNNER_TEMP/work.json"
-          python3 validation/validate_pr.py --issue-json "$WORK_NUMBER" < "$RUNNER_TEMP/work.json"
+          "${validator[@]}" --issue-json "$WORK_NUMBER" < "$RUNNER_TEMP/work.json"

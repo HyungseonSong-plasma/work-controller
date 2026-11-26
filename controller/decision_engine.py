@@ -1,22 +1,14 @@
 """Read-only controller: discover Work and recommend the next action."""
-import argparse
 import json
 import subprocess
-import sys
 import unittest
-from pathlib import Path
 from unittest.mock import patch
 
-# Existing validators use sibling imports; import them through the validation path.
-sys.path.insert(0, str(Path(__file__).resolve().parent / "validation"))
-from validate_issue import validate as valid_issue
-from validate_completion import assessment, declared_works
-from validate_merge import REPO, api, digest, snapshot
-from validate_pr import errors as pr_errors
-
-
-def pages(path):
-    return [item for page in api(path, "--paginate", "--slurp") for item in page]
+from validation.issue import validate as valid_issue
+from validation.completion import assessment, declared_works
+from validation.merge import snapshot
+from validation.model import api, digest, pages
+from validation.pr import errors as pr_errors
 
 
 def required_checks(repo, number):
@@ -151,23 +143,3 @@ class ControllerTests(unittest.TestCase):
         with patch(__name__ + ".pages", side_effect=RuntimeError("unavailable")):
             with self.assertRaises(RuntimeError):
                 discover(self.repo)
-
-
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--repo", required=True)
-    args = parser.parse_args()
-    if not REPO.fullmatch(args.repo):
-        parser.error("Expected owner/repo")
-    print(json.dumps(discover(args.repo), indent=2, ensure_ascii=False))
-
-
-if __name__ == "__main__":
-    if sys.argv[1:] == ["--test"]:
-        unittest.main(argv=[sys.argv[0]])
-    else:
-        try:
-            main()
-        except (ValueError, KeyError, TypeError, RuntimeError, subprocess.CalledProcessError) as exc:
-            print(f"Controller discovery failed: {exc}", file=sys.stderr)
-            sys.exit(1)

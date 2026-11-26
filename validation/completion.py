@@ -1,27 +1,19 @@
 """Work completion contract. Run from a trusted main checkout."""
-import argparse
-import json
 import re
-import subprocess
-import sys
 import unittest
 from unittest.mock import patch
 
-from validate_issue import validate as validate_issue
-from validate_pr import HEADING, errors as pr_errors, work_number
-from validate_merge import api, digest, REPO
+from .issue import validate as validate_issue
+from .pr import errors as pr_errors, work_number
+from .model import api, digest, normalize, sections, without_comments, pages
 
 
 def declared_works(body):
     """Find canonical reference lines in Work sections even if other sections are invalid."""
-    body = re.sub(r"<!--.*?-->", "", (body or "").replace("\r\n", "\n"), flags=re.S)
-    headings = list(HEADING.finditer(body))
     result = set()
-    for i, heading in enumerate(headings):
-        if heading.group(1) == "Work":
-            end = headings[i + 1].start() if i + 1 < len(headings) else len(body)
-            for value in re.findall(r"^Refs #([1-9][0-9]*)[ \t]*$", body[heading.end():end], re.M):
-                result.add(int(value))
+    for name, value in sections(without_comments(normalize(body))):
+        if name == "Work":
+            result.update(int(n) for n in re.findall(r"^Refs #([1-9][0-9]*)[ \t]*$", value, re.M))
     return result
 
 
@@ -64,8 +56,7 @@ def assessment(repo, number, issue, pulls):
 
 def read_assessment(repo, number):
     issue = api(f"repos/{repo}/issues/{number}")
-    pages = api(f"repos/{repo}/pulls?state=all&per_page=100", "--paginate", "--slurp")
-    return assessment(repo, number, issue, [pr for page in pages for pr in page])
+    return assessment(repo, number, issue, pages(f"repos/{repo}/pulls?state=all&per_page=100"))
 
 
 def approved_close(repo, number, approved, evidence=None, close=False):
@@ -162,45 +153,3 @@ class CompletionTests(unittest.TestCase):
         with patch(__name__ + ".read_assessment", return_value=(dict(data, state_reason="not_planned"), blockers)), patch(__name__ + ".api") as call:
             self.assertEqual(guard_closed(self.repo, 3), [])
             call.assert_not_called()
-
-
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--repo", required=True)
-    parser.add_argument("--work", required=True, type=int)
-    parser.add_argument("--approved-snapshot")
-    parser.add_argument("--evidence")
-    mode = parser.add_mutually_exclusive_group()
-    mode.add_argument("--close", action="store_true")
-    mode.add_argument("--guard-closed", action="store_true")
-    args = parser.parse_args()
-    if not REPO.fullmatch(args.repo) or args.work < 1:
-        parser.error("Expected owner/repo and positive issue number")
-    if args.guard_closed:
-        if args.approved_snapshot or args.evidence:
-            parser.error("Guard mode does not accept review arguments")
-        blockers = guard_closed(args.repo, args.work)
-        if blockers:
-            raise ValueError("; ".join(blockers))
-        print("Structural completion guard passed or not applicable")
-    elif args.approved_snapshot:
-        approved_close(args.repo, args.work, args.approved_snapshot, args.evidence, args.close)
-        print("Work completion preflight passed" + ("; closed as completed" if args.close else ""))
-    else:
-        if args.close or args.evidence:
-            parser.error("Closure requires --approved-snapshot and --evidence")
-        data, blockers = read_assessment(args.repo, args.work)
-        print(json.dumps({"snapshot": data, "review_digest": digest(data), "blockers": blockers},
-                         indent=2, ensure_ascii=False))
-        sys.exit(bool(blockers) or data["state"] != "open")
-
-
-if __name__ == "__main__":
-    if sys.argv[1:] == ["--test"]:
-        unittest.main(argv=[sys.argv[0]])
-    else:
-        try:
-            main()
-        except (ValueError, KeyError, TypeError, subprocess.CalledProcessError) as exc:
-            print(f"Work completion contract failed: {exc}", file=sys.stderr)
-            sys.exit(1)
