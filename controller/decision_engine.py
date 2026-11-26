@@ -106,13 +106,17 @@ def decide(repo, issues, pulls, check_reader, detail_reader, comment_reader=None
                     actions.append({"pr": pr["number"], "action": "HUMAN_REVIEW", "reasons": [str(exc)]})
             blockers = [a for a in actions if a["action"] in {"HUMAN_REVIEW", "WAIT_B_APPROVAL", "STOP_B_WORK"}]
             item["actions"] = blockers or actions
-        elif approval_reader and approval.labels(issue):
+        elif approval_reader:
             try:
                 evidence = approval_reader(repo, number, None)
-                if not evidence["allowed"]:
+                if evidence["state"] not in {"APPROVED", "NOT_REQUESTED", "NOT_REQUIRED"}:
                     item["actions"].append({"action": {"PENDING": "WAIT_B_APPROVAL", "REVOKED": "STOP_B_WORK"}.get(evidence["state"], "HUMAN_REVIEW"), "reasons": [evidence["reason"]]})
+                elif not blockers:
+                    item["actions"].append({"action": "REVIEW_COMPLETION", "review_digest": digest(data)})
+                elif any(u["status"] == "merged" for u in data["units"]):
+                    item["actions"].append({"action": "REVIEW_COMPLETION_BLOCKERS", "reasons": blockers})
                 else:
-                    item["actions"].append({"action": "REVIEW_COMPLETION" if not blockers else "PLAN_WORK", "review_digest": digest(data)})
+                    item["actions"].append({"action": "PLAN_WORK", "reasons": blockers})
             except approval.ERRORS as exc:
                 item["actions"].append({"action": "HUMAN_REVIEW", "reasons": [str(exc)]})
         elif not blockers:
@@ -207,3 +211,11 @@ class ControllerTests(unittest.TestCase):
                         lambda r,n:self.pr if n==2 else other_pr,approval_reader=broken)
         self.assertEqual(report["works"][0]["actions"][0]["action"],"HUMAN_REVIEW")
         self.assertEqual(report["works"][1]["actions"][0]["action"],"REVIEW_MERGE")
+
+    def test_removed_approval_without_active_pr(self):
+        report = decide(self.repo,[self.issue],[],lambda r,n:self.checks,lambda r,n:self.pr,
+                        approval_reader=lambda r,w,p: {"state":"REVOKED","allowed":False,"reason":"label removed"})
+        self.assertEqual(report["works"][0]["actions"][0]["action"], "STOP_B_WORK")
+        report = decide(self.repo,[self.issue],[],lambda r,n:self.checks,lambda r,n:self.pr,
+                        approval_reader=lambda r,w,p: {"state":"NOT_REQUESTED","allowed":False,"reason":"none"})
+        self.assertEqual(report["works"][0]["actions"][0]["action"], "PLAN_WORK")
