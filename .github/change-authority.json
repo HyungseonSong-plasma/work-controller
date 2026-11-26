@@ -1,0 +1,15 @@
+{
+  "owner": "HyungseonSong-plasma",
+  "A": [
+    ".github/change-authority.json",
+    ".github/workflows/grade-a.yml",
+    "validation/authority.py"
+  ],
+  "B": [
+    ".github/",
+    "validation/",
+    "app/",
+    "controller/"
+  ],
+  "default": "C"
+}
