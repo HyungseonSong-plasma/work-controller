@@ -25,7 +25,20 @@ on:
         default: ''
 permissions: {}
 concurrency:
-  group: ${{ (github.event_name != 'issue_comment' || (!github.event.issue.pull_request && github.event.issue.state == 'open' && (github.event.comment.body == '/cleanup plan' || startsWith(github.event.comment.body, '/execute-cleanup ')))) && 'post-work-cleanup' || format('post-work-cleanup-ignored-{0}', github.run_id) }}
+  # Unrelated events must not cancel a pending eligible cleanup in GitHub's
+  # one-pending-run concurrency queue.
+  group: >-
+    ${{ (github.ref == 'refs/heads/main' &&
+         (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' ||
+          (github.event_name == 'pull_request_target' && github.event.pull_request.merged == true) ||
+          (github.event_name == 'issues' && github.event.issue.state_reason == 'completed') ||
+          (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
+          (github.event_name == 'issue_comment' && !github.event.issue.pull_request &&
+           github.event.issue.state == 'open' &&
+           (github.event.comment.body == '/cleanup plan' ||
+            (vars.AGENT_CLEANUP_DELEGATION == 'v1' &&
+             startsWith(github.event.comment.body, '/execute-cleanup '))))))
+       && 'post-work-cleanup' || format('post-work-cleanup-ignored-{0}', github.run_id) }}
   cancel-in-progress: false
 jobs:
   plan:
