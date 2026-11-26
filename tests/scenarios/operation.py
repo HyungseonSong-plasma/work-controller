@@ -373,3 +373,141 @@ class CommentRequestTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 review.comment_request(self.repo)
             write.assert_not_called()
+
+
+    def test_delegation_grammar_and_disabled(self):
+        from controller import review
+        merge_text = "/execute-review merge 101 102 5 " + "a"*64 + " " + "b"*40
+        close_text = "/execute-review close 101 102 " + "a"*64 + "\nEvidence: Reviewed"
+        self.assertEqual(review.parse_execution(merge_text, 4)[2]["pr"], "5")
+        self.assertEqual(review.parse_execution(close_text, 4)[2]["evidence"], "Reviewed")
+        for bad in (merge_text + " ", merge_text.replace(" 101 ", " 0 "), close_text + "\n",
+                    close_text.replace("Reviewed", " "), close_text.replace("Reviewed", "\tbad"),
+                    "/execute-review close 101 102 " + "a"*64):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                review.parse_execution(bad, 4)
+        with patch.dict(os.environ, {}, clear=True), patch.object(operation, "event_context") as event, \
+                patch.object(review, "execute") as write:
+            with self.assertRaisesRegex(ValueError, "disabled"):
+                review.delegated_request(self.repo)
+            event.assert_not_called()
+            write.assert_not_called()
+
+    def test_delegated_request_boundary_and_both_actions(self):
+        from controller import review
+        identity = self.identity()
+        commands = (("/execute-review merge 101 102 5 " + "a"*64 + " " + "b"*40, "merge"),
+                    ("/execute-review close 101 102 " + "a"*64 + "\nEvidence: Reviewed", "close"))
+        for command, action in commands:
+            event = self.event()
+            event["comment"]["body"] = command
+            with patch.dict(os.environ, {"AGENT_REVIEW_DELEGATION": "v1", "REVIEW_ACTION": action,
+                                        "GITHUB_TRIGGERING_ACTOR": "owner", "GITHUB_EVENT_NAME": "issue_comment"}, clear=True), \
+                    patch.object(operation, "event_context", return_value=(event, self.sha, "owner", 99, 1)) as context, \
+                    patch.object(operation, "request_identity", return_value=identity) as check, \
+                    patch.object(authority, "read_policy", return_value={"owner": "owner"}), \
+                    patch.object(review, "verified_reference", return_value="2026-01-01T00:00:00Z") as verified, \
+                    patch.object(review, "wait_merge_refresh") as wait, \
+                    patch.object(review, "guard_prior_dispatches") as replay, \
+                    patch.object(review, "execute", return_value={"state": "MERGED" if action == "merge" else "CLOSED"}) as write:
+                self.assertIn(review.execute_request(self.repo)["state"], ("MERGED", "CLOSED"))
+                self.assertEqual(verified.call_count, 2)
+                self.assertEqual(check.call_count, 2)
+                replay.assert_called_once()
+                if action == "merge":
+                    wait.assert_called_once()
+                else:
+                    wait.assert_not_called()
+                write.assert_called_once()
+                self.assertEqual(write.call_args.args[1]["review_job"], 102)
+                write.reset_mock()
+                for target in (verified, replay):
+                    target.side_effect = ValueError("blocked")
+                    with self.assertRaises(ValueError):
+                        review.execute_request(self.repo)
+                    write.assert_not_called()
+                    target.side_effect = None
+                check.side_effect = ValueError("edited or unauthorized")
+                with self.assertRaises(ValueError):
+                    review.execute_request(self.repo)
+                write.assert_not_called()
+                check.side_effect = None
+                context.return_value = (event, self.sha, "owner", 99, 2)
+                with self.assertRaises(ValueError):
+                    review.execute_request(self.repo)
+                write.assert_not_called()
+                context.return_value = (event, self.sha, "owner", 99, 1)
+                with patch.dict(os.environ, {"REVIEW_ACTION": "other"}), self.assertRaises(ValueError):
+                    review.execute_request(self.repo)
+                write.assert_not_called()
+
+    def test_delegated_verified_reference_and_log_parsing(self):
+        from datetime import datetime, timezone
+        from controller import review
+        from validation.model import digest
+        now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        identity = dict(self.identity(), comment=52)
+        data = {"repository": self.repo, "work": 4, "pr": 5, "base": self.sha, "head": "b"*40}
+        approved = digest(data)
+        inputs = {"action": "merge", "work": "4", "pr": "5", "snapshot": approved, "head": "b"*40}
+        command = "/review merge verify 5 " + approved + " " + "b"*40
+        run = {"id": 101, "path": ".github/workflows/review-preflight.yml", "event": "issue_comment",
+               "head_sha": self.sha, "head_branch": "main", "status": "completed", "conclusion": "success",
+               "actor": {"login": "owner"}, "run_attempt": 1, "created_at": now}
+        job = {"id": 102, "run_id": 101, "run_attempt": 1, "name": "preflight",
+               "head_sha": self.sha, "status": "completed", "conclusion": "success", "completed_at": now}
+        report = {"repository": self.repo, "state": "VERIFIED", "mode": "read-only", "execution": None,
+                  "blockers": [], "review_digest": approved, "snapshot": data,
+                  "request": {"work": 4, "pr": 5, "run": 101, "attempt": 1, "base": self.sha,
+                              "command": command, "comment": 51}}
+        original = dict(self.comment, body=command, created_at=now, updated_at=now)
+        args = (self.repo, identity, 101, 102, inputs, now, "owner")
+        with patch.object(review, "api", side_effect=[run, {"total_count": 1, "jobs": [job]}, original]), \
+                patch.object(review, "read_review_log", return_value=report):
+            self.assertEqual(review.verified_reference(*args), now)
+        for bad_run in (dict(run, head_sha="c"*40), dict(run, conclusion="failure"),
+                        dict(run, path="other"), dict(run, event="workflow_dispatch")):
+            with patch.object(review, "api", return_value=bad_run), self.assertRaises(ValueError):
+                review.verified_reference(*args)
+        for bad_job in (dict(job, run_attempt=2), dict(job, completed_at="2000-01-01T00:00:00Z"),
+                        dict(job, id=103), dict(job, conclusion="failure")):
+            with patch.object(review, "api", side_effect=[run, {"total_count": 1, "jobs": [bad_job]}]), self.assertRaises(ValueError):
+                review.verified_reference(*args)
+        for bad in (dict(report, state="SNAPSHOT"), dict(report, execution={}), dict(report, blockers=["bad"]),
+                    dict(report, request=dict(report["request"], work=9)),
+                    dict(report, request=dict(report["request"], attempt=2)),
+                    dict(report, request=dict(report["request"], comment=52)),
+                    dict(report, snapshot=dict(data, head="c"*40))):
+            with patch.object(review, "api", side_effect=[run, {"total_count": 1, "jobs": [job]}]), \
+                    patch.object(review, "read_review_log", return_value=bad), self.assertRaises(ValueError):
+                review.verified_reference(*args)
+        with patch.object(review, "api", side_effect=[run, {"total_count": 1, "jobs": [job]},
+                                                         dict(original, updated_at="2000-01-01T00:00:00Z")]), \
+                patch.object(review, "read_review_log", return_value=report), self.assertRaises(ValueError):
+            review.verified_reference(*args)
+        raw = "\n".join(now + " " + line for line in json.dumps(report, indent=2).splitlines()).encode()
+        with patch.object(review.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, raw)) as gh:
+            self.assertEqual(review.read_review_log(self.repo, 102), report)
+            self.assertEqual(gh.call_args.args[0][-1], "repos/owner/repo/actions/jobs/102/logs")
+            self.assertEqual(gh.call_args.kwargs["timeout"], 20)
+        for bad in (b"nothing", raw + b"\n" + raw, b"{\n", b"x"*(review.MAX_REVIEW_LOG+1)):
+            with patch.object(review.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, bad)), self.assertRaises(ValueError):
+                review.read_review_log(self.repo, 102)
+
+    def test_delegated_replay_guard(self):
+        from controller import review
+        identity = self.identity()
+        now = "2026-01-01T00:00:05Z"
+        current = {"id": 99, "run_attempt": 1, "created_at": now}
+        previous = {"id": 98, "status": "completed", "created_at": "2026-01-01T00:00:04Z"}
+        history = {"total_count": 2, "workflow_runs": [current, previous]}
+        with patch.object(review, "api", side_effect=[history, {"total_count": 2, "jobs": [
+                {"conclusion": "skipped"}, {"conclusion": "skipped"}]}]):
+            review.guard_prior_dispatches(self.repo, identity, "2026-01-01T00:00:00Z")
+        for entries in ([{"conclusion": "success"}], [{"conclusion": "failure"}], []):
+            with patch.object(review, "api", side_effect=[history, {"total_count": len(entries), "jobs": entries}]), self.assertRaises(ValueError):
+                review.guard_prior_dispatches(self.repo, identity, "2026-01-01T00:00:00Z")
+        for bad in (dict(history, total_count=3), dict(history, workflow_runs=[previous], total_count=1),
+                    dict(history, workflow_runs=[current, dict(previous, status="in_progress")])):
+            with patch.object(review, "api", return_value=bad), self.assertRaises(ValueError):
+                review.guard_prior_dispatches(self.repo, identity, "2026-01-01T00:00:00Z")
