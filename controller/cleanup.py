@@ -4,6 +4,8 @@ import json
 import os
 import re
 import subprocess
+import sys
+import time
 from urllib.parse import quote, urlencode
 
 from validation import authority, completion, issue, pr
@@ -60,15 +62,25 @@ def listed(path, key):
 
 
 def counted(path, field):
-    pages = api(path, "--paginate", "--slurp")
-    if not isinstance(pages, list) or not pages or any(
-            not isinstance(p, dict) or type(p.get("total_count")) is not int
-            or not isinstance(p.get(field), list) for p in pages):
-        raise ValueError("Incomplete counted pagination")
-    items = unique([x for p in pages for x in p[field]], "id")
-    if any(p["total_count"] != len(items) for p in pages):
-        raise ValueError("Counted enumeration changed or truncated")
-    return items
+    """Restart an inconsistent counted GET; never use partial or combined results."""
+    for attempt in range(1, 4):
+        pages = api(path, "--paginate", "--slurp")
+        if not isinstance(pages, list) or not pages or any(
+                not isinstance(p, dict) or type(p.get("total_count")) is not int
+                or p["total_count"] < 0 or not isinstance(p.get(field), list)
+                for p in pages):
+            raise ValueError(f"Incomplete counted pagination: {path}, field={field}")
+        items = unique([x for p in pages for x in p[field]], "id")
+        if all(p["total_count"] == len(items) for p in pages):
+            return items
+        counts = [(p["total_count"], len(p[field])) for p in pages]
+        reason = (f"Counted enumeration changed or truncated: {path}, field={field}, "
+                  f"page (total, fetched) counts={counts}, collected={len(items)}, "
+                  f"attempt={attempt}/3")
+        if attempt == 3:
+            raise ValueError(reason)
+        print(reason + "; restarting read-only enumeration", file=sys.stderr, flush=True)
+        time.sleep(attempt)
 
 
 def run_is_disposable(run, jobs, artifacts):
