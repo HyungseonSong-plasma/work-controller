@@ -1,7 +1,7 @@
 """Structural Work Unit contract; no external dependencies."""
 import re
 import unittest
-from .issue import validate as validate_issue
+from .issue import validate as validate_issue, work_type
 from .model import PLACEHOLDERS, normalize, sections, without_comments
 
 FIELDS = ("Work", "Changes", "Verification")
@@ -39,6 +39,8 @@ def work_errors(number, issue):
         return ["Referenced Work must be OPEN"]
     if not validate_issue(issue.get("body")):
         return ["Referenced Work violates the Issue contract"]
+    if work_type(issue.get("body")) == "Read-only":
+        return ["Read-only Work must not have a PR"]
     return []
 
 
@@ -79,3 +81,7 @@ class ContractTests(unittest.TestCase):
         for bad in (None, {}, dict(issue, number=13), dict(issue, state="closed"),
                     dict(issue, pull_request={}), dict(issue, body=""), dict(issue, body=None)):
             self.assertTrue(work_errors(12, bad))
+
+    def test_read_only_target(self):
+        issue = {"number": 12, "state": "open", "body": "### Work type\n\nRead-only\n\n### Objective\n\nX\n\n### Scope\n\nX only\n\n### Acceptance criteria\n\nReport"}
+        self.assertEqual(work_errors(12, issue), ["Read-only Work must not have a PR"])

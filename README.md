@@ -19,7 +19,7 @@ Use `.github/pull_request_template.md`: `Work` (`Refs #<issue number>`), `Change
 
 Run `python3 -m app.cli test pr` for validator tests. The `pr-template` Actions check runs on opened, edited, reopened, synchronized, and ready-for-review PRs. To enforce merge blocking, configure a main-branch protection rule or active ruleset requiring this check (GitHub Actions source) and disallow bypasses. A failed check alone does not prevent a privileged merge. Candidate tests run in a separate read-only job. The required check validates metadata using validators checked out at the base SHA, not candidate validators. The workflow definition remains PR-controlled; trusted review of workflow changes and a dedicated independent required check source are needed for adversarial enforcement. PR body edits trigger asynchronous revalidation.
 
-The Work relationship is checked on PR events, not automatically on Issue changes. The check is a point-in-time result; revalidate the current Issue and PR before merge. A reference outside the Work section is not a membership declaration.
+The Work relationship is checked on PR events, not automatically on Issue changes. The check is a point-in-time result; revalidate the current Issue and PR before merge. A reference outside the Work section is not a membership declaration. Read-only Work cannot have a PR.
 
 ## Merge contract
 
@@ -41,7 +41,7 @@ Native GitHub UI/API merges can bypass this preflight while satisfying the rules
 
 ## Work completion contract
 
-A code Work may close as completed when its Issue contract is valid, at least one declared Work Unit has merged into this repository's main with valid PR metadata, and no declared Work Unit remains open. A closed-unmerged PR is discarded, not delivered; its disposition must be considered during acceptance review. No new template fields or Work IDs. Non-code work without merged PRs is not covered by this completion policy.
+A code Work may close as completed when its Issue contract is valid, at least one declared Work Unit has merged into this repository's main with valid PR metadata, and no declared Work Unit remains open. A closed-unmerged PR is discarded, not delivered; its disposition must be considered during acceptance review. No new Work IDs. The Issue Form requires Work type (Implementation or Read-only); legacy untyped records are interpreted as Implementation for historical reads, but opened, edited, or reopened Issues must supply the type.
 
 Membership is read from current canonical `Refs #N` lines in the PR's Work section (including malformed PRs with such lines); ordinary references elsewhere do not establish membership. All PR pages are scanned. Removing or changing the declaration can alter membership; historical linkage, reachability after reverts, and semantic verification are not proved by this check.
 
@@ -73,4 +73,8 @@ The Controller reads every page of open Issues and PRs, excludes PRs from the Wo
 - `REVIEW_MERGE`: inspect scope and evidence, then use the existing merge preflight if authorized.
 - `REVIEW_COMPLETION`, `REVIEW_COMPLETION_BLOCKERS`: inspect acceptance criteria or resolve completion blockers.
 
-Review digests are suggestions bound to the observed snapshot, not approvals. The controller does not infer semantic completion, and live data can change during discovery. Re-run the relevant preflight immediately before a write. Read-only/non-code Work completion and A/B/C file modification authority require separate policy approval; this version does not change those contracts. API errors fail the run rather than producing a potentially incomplete execution plan.
+Review digests are suggestions bound to the observed snapshot, not approvals. The controller does not infer semantic completion, and live data can change during discovery. Re-run the relevant preflight immediately before a write. Read-only Work with no result suggests PERFORM_READ_ONLY; with a result it suggests REVIEW_COMPLETION. A/B/C file modification authority remains a separate policy. API errors fail the run rather than producing a potentially incomplete execution plan.
+
+### Read-only Work
+
+No PR is required or allowed. Post a non-empty Issue comment beginning with `### Work result`, containing findings and verification evidence mapped to the acceptance criteria. The completion validator requires at least one such result, no associated PRs, and valid Issue metadata. Result comments are included in the reviewed snapshot. The Controller recommends `PERFORM_READ_ONLY` until results exist. Semantic acceptance is still a manual decision; a valid comment format is not proof of correctness. Historical untyped Issues must be migrated before editing or reopening. The event-based enforcement remains asynchronous.

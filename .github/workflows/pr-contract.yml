@@ -38,12 +38,6 @@ jobs:
         run: |
           set -euo pipefail
           gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq '.body // ""' > "$RUNNER_TEMP/pr-body.md"
-          # Bootstrap compatibility for a base predating the unified CLI.
-          if [[ -f app/cli.py ]]; then
-            validator=(python3 -m app.cli pr)
-          else
-            validator=(python3 validation/validate_pr.py)
-          fi
-          WORK_NUMBER=$("${validator[@]}" --work-number < "$RUNNER_TEMP/pr-body.md")
+          WORK_NUMBER=$(python3 -m app.cli pr --work-number < "$RUNNER_TEMP/pr-body.md")
           gh api "repos/$GITHUB_REPOSITORY/issues/$WORK_NUMBER" > "$RUNNER_TEMP/work.json"
-          "${validator[@]}" --issue-json "$WORK_NUMBER" < "$RUNNER_TEMP/work.json"
+          python3 -m app.cli pr --issue-json "$WORK_NUMBER" < "$RUNNER_TEMP/work.json"

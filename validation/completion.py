@@ -3,9 +3,9 @@ import re
 import unittest
 from unittest.mock import patch
 
-from .issue import validate as validate_issue
+from .issue import validate as validate_issue, work_type
 from .pr import errors as pr_errors, work_number
-from .model import api, digest, normalize, sections, without_comments, pages
+from .model import api, digest, normalize, sections, without_comments, pages, PLACEHOLDERS
 
 
 def declared_works(body):
@@ -17,7 +17,18 @@ def declared_works(body):
     return result
 
 
-def assessment(repo, number, issue, pulls):
+def result_comments(comments):
+    results = []
+    for comment in sorted(comments, key=lambda c: c["id"]):
+        body = without_comments(normalize(comment.get("body"))).strip()
+        match = re.match(r"^### Work result[ \t]*\n([\s\S]+)$", body)
+        if match and match.group(1).strip() and match.group(1).strip().casefold() not in PLACEHOLDERS:
+            results.append({"id": comment["id"], "body": comment["body"],
+                            "author": (comment.get("user") or {}).get("login")})
+    return results
+
+
+def assessment(repo, number, issue, pulls, comments=()):
     """Return review snapshot and structural blockers; does not judge meaning."""
     blockers = []
     if issue.get("number") != number or "pull_request" in issue:
@@ -46,17 +57,25 @@ def assessment(repo, number, issue, pulls):
         units.append({"number": n, "status": status, "title": pr["title"], "body": pr.get("body"),
                       "head": pr["head"]["sha"], "base": pr["base"]["ref"],
                       "merge_commit": pr.get("merge_commit_sha") if status == "merged" else None})
-    if not merged:
+    kind = work_type(issue.get("body"))
+    results = result_comments(comments) if kind == "Read-only" else []
+    if kind == "Read-only":
+        if units:
+            blockers.append("Read-only Work must not have linked PRs")
+        if not results:
+            blockers.append("Read-only Work requires a non-empty Work result comment")
+    elif not merged:
         blockers.append("Work requires at least one valid merged Work Unit")
     data = {"repository": repo.casefold(), "work": number, "title": issue["title"],
             "body": issue.get("body"), "state": issue["state"],
-            "state_reason": issue.get("state_reason"), "units": units}
+            "state_reason": issue.get("state_reason"), "units": units, "work_type": kind, "results": results}
     return data, blockers
 
 
 def read_assessment(repo, number):
     issue = api(f"repos/{repo}/issues/{number}")
-    return assessment(repo, number, issue, pages(f"repos/{repo}/pulls?state=all&per_page=100"))
+    comments = pages(f"repos/{repo}/issues/{number}/comments?per_page=100") if work_type(issue.get("body")) == "Read-only" else []
+    return assessment(repo, number, issue, pages(f"repos/{repo}/pulls?state=all&per_page=100"), comments)
 
 
 def approved_close(repo, number, approved, evidence=None, close=False):
@@ -153,3 +172,16 @@ class CompletionTests(unittest.TestCase):
         with patch(__name__ + ".read_assessment", return_value=(dict(data, state_reason="not_planned"), blockers)), patch(__name__ + ".api") as call:
             self.assertEqual(guard_closed(self.repo, 3), [])
             call.assert_not_called()
+
+    def test_read_only_completion(self):
+        issue = dict(self.issue, body="### Work type\n\nRead-only\n\n" + self.issue["body"])
+        comment = {"id": 7, "body": "### Work result\n\nFindings and evidence.", "user": {"login": "reviewer"}}
+        data, blockers = assessment(self.repo, 3, issue, [], [comment])
+        self.assertEqual(blockers, [])
+        self.assertEqual(data["work_type"], "Read-only")
+        self.assertEqual(data["results"][0]["id"], 7)
+        self.assertTrue(assessment(self.repo, 3, issue, [self.pr], [comment])[1])
+        for body in ("ordinary comment", "### Work result\n\nTBD", "### Work result\n\n<!-- empty -->"):
+            self.assertTrue(assessment(self.repo, 3, issue, [], [dict(comment, body=body)])[1])
+        revised, _ = assessment(self.repo, 3, issue, [], [dict(comment, body=comment["body"]+" revised")])
+        self.assertNotEqual(digest(data), digest(revised))
