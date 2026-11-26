@@ -142,8 +142,7 @@ def plan_paths(repo, work, paths):
 class AuthorityTests(unittest.TestCase):
     policy = {"owner": "owner", "A": ["policy/"], "B": [".github/", "validation/", "app/"], "default": "C"}
     issue = {"number": 3, "title": "Work", "state": "open",
-             "body": "### Work type\n\nImplementation\n\n### Objective\n\nX\n\n### Scope\n\nX only\n\n### Acceptance criteria\n\nX passes"}
-
+             "body": "### Work type\n\nImplementation\n\n### Objective\n\nX\n\n### Scope\n\n#### Constraints\n\n- X only\n\n#### Actions\n\n- Implement X\n\n### Acceptance criteria\n\nX passes"}
     def test_classification(self):
         self.assertEqual(classify(self.policy, ["README.md"])["grade"], "C")
         self.assertEqual(classify(self.policy, ["README.md", "validation/pr.py"])["grade"], "B")
