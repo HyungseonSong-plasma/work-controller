@@ -6,6 +6,7 @@ import re
 import subprocess
 import sys
 import unittest
+from unittest.mock import patch
 from validate_pr import work_number, work_errors
 
 SHA = re.compile(r"[0-9a-f]{40}")
@@ -98,6 +99,23 @@ class MergeTests(unittest.TestCase):
                           (dict(self.pr, head={"sha": "c"*40}), self.issue),
                           (self.pr, dict(self.issue, body=self.issue["body"]+" again"))):
             self.assertNotEqual(original, digest(snapshot(pr, issue, self.repo, 4)))
+
+    def test_verify_rejects_stale_or_failed(self):
+        data = snapshot(self.pr, self.issue, self.repo, 4)
+        pr = dict(self.pr, mergeable=True, mergeable_state="clean")
+        checks = subprocess.CompletedProcess([], 0, '[{"name":"pr-template","state":"SUCCESS"}]')
+        with patch(__name__ + ".read_snapshot", return_value=(data, pr)), patch("subprocess.run", return_value=checks):
+            self.assertEqual(verify(self.repo, 4, digest(data), data["head"]), data)
+            with self.assertRaises(ValueError):
+                verify(self.repo, 4, "wrong", data["head"])
+            with self.assertRaises(ValueError):
+                verify(self.repo, 4, digest(data), "c"*40)
+        with patch(__name__ + ".read_snapshot", return_value=(data, pr)), patch("subprocess.run", return_value=subprocess.CompletedProcess([], 0, '[]')):
+            with self.assertRaises(ValueError):
+                verify(self.repo, 4, digest(data), data["head"])
+        with patch(__name__ + ".read_snapshot", side_effect=[(data, pr), (dict(data, work_title="new"), pr)]), patch("subprocess.run", return_value=checks):
+            with self.assertRaises(ValueError):
+                verify(self.repo, 4, digest(data), data["head"])
 
 
 def main():
