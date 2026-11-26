@@ -45,3 +45,28 @@ class MergeTests(unittest.TestCase):
         with patch.object(merge, "read_snapshot", side_effect=[(data, pr), (dict(data, work_title="new"), pr)]), patch("subprocess.run", return_value=checks):
             with self.assertRaises(ValueError):
                 verify(self.repo, 4, digest(data), data["head"])
+
+
+    def test_full_preflight_and_merge_share_authority(self):
+        from validation import approval, authority
+        data = snapshot(self.pr, self.issue, self.repo, 4)
+        args = (self.repo, 4, digest(data), data["head"])
+        with patch.object(merge, "verify", return_value=data) as check, patch.object(approval, "inspect_pr", return_value={"allowed": True, "approval_digest": "B"}) as approve, patch.object(authority, "inspect_pr", return_value={"allowed": True}) as rank, patch.object(merge, "api", return_value={"merged": True}) as write:
+            self.assertEqual(merge.verify_full(*args, expected_work=3), data)
+            self.assertEqual(check.call_count, 2)
+            rank.assert_called_once_with(self.repo, 4, data["head"], data["base"], "B")
+            write.assert_not_called()
+            self.assertEqual(merge.merge_approved(*args), {"merged": True})
+            write.assert_called_once()
+            write.reset_mock()
+            for kwargs in ({"expected_work": 99}, {"approved_change": "wrong"}):
+                with self.assertRaises(ValueError):
+                    merge.merge_approved(*args, **kwargs)
+            approve.return_value = {"allowed": False, "reason": "revoked"}
+            with self.assertRaises(ValueError):
+                merge.verify_full(*args)
+            approve.return_value = {"allowed": True}
+            rank.return_value = {"allowed": False, "reason": "A path"}
+            with self.assertRaises(ValueError):
+                merge.merge_approved(*args)
+            write.assert_not_called()

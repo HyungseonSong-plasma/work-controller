@@ -31,7 +31,7 @@ Validate that the returned value is an array and inspect the actual comment IDs 
 - C: may implement within assigned scope; ordinary Work, PR, merge and completion contracts still apply.
 - Prefer the bounded Executor from trusted main: prepare a canonical file plan, review its dry-run, then execute with the reviewed plan digest and valid authority. The Controller report is read-only; it does not execute a plan by itself.
 - Scheduled Agents must not substitute raw connector file/tree/ref/PR writes for an unavailable Executor or bypass its preflight. Report the limitation for owner review. Interactive, explicitly owner-directed connector publication is a manual operating path, not Executor execution; document the fallback, check exact scope and current authority before writing, use a feature branch and verify the published diff and checks. Never write directly to main or force-push. The connector does not automatically enforce all CLI preflights.
-- Require explicit merge authorization, current reviewed metadata and diff, required successful checks, matching head/base and current approval evidence. Use the trusted-main merge preflight where available; if unavailable, report that limitation and do not claim it ran. Same-account access is not independent reviewer identity. Do not merge merely because CI passed, a B label is present or a review digest exists.
+- Require explicit merge authorization, current reviewed metadata and diff, required successful checks, matching head/base and current approval evidence. Use the trusted-main merge preflight or read-only review bridge; if unavailable, stop and report the limitation. Agent direct connector merge/close fallback is prohibited. Same-account access is not independent reviewer identity. Do not merge merely because CI passed, a B label is present or a review digest exists.
 
 ## 4. Scheduled Work lifecycle
 
@@ -45,7 +45,7 @@ For each scheduled discovery cycle:
 4. Use only the matched report and only the assigned Work's recommendations. A skipped non-command job may have no direct comment-ID trace; do not claim exact negative-control correlation without evidence. Do not treat a skipped or unmatched run as a successful request. If a run is missing, pending, failed, superseded or ambiguous, inspect and report; do not blindly repost or retry.
 5. Respect WAIT_B_APPROVAL, STOP_B_WORK, HUMAN_REVIEW and CI/merge waits. No automatic plan publication, merge or closure inferred from the report.
 
-Before completion, map the acceptance criteria to actual evidence, verify all linked PRs and completion contract, and require owner acceptance/closure authorization. Record concise evidence in the Work; close only that Work as completed and read back its state. If already completed with verified evidence, do not duplicate the comment.
+Before completion, map the acceptance criteria to actual evidence, verify all linked PRs and completion contract, and require owner acceptance/closure authorization. Record concise evidence in the Work; request owner execution to close only that Work as completed and read back its state. If already completed with verified evidence, do not duplicate the comment.
 
 Then locate the exact task ID with the automation lookup operation (ChatGPT `mcp__Automations__peek({jawbone_id: taskId})`), verify its title and Work binding, disable only that task (`mcp__Automations__update({jawbone_id: taskId, is_enabled: false})`), and read back the disabled state. If either closure or disable fails, report the actual state; do not claim completion of both or alter other tasks. Do not delete task history or claim context reset.
 
@@ -55,3 +55,8 @@ Then locate the exact task ID with the automation lookup operation (ChatGPT `mcp
 - The separate `executor-live-ci` command writes disposable C-grade fixtures only when manually dispatched on trusted main. Never invoke it during ordinary unit tests or candidate CI. Verify publication and cleanup from real logs before claiming live success; fixture downstream CI is not established by that run.
 - Report actual Work/PR/run/job IDs, relevant SHA, evidence and status. Distinguish implementation, test execution, merge, acceptance, live verification and task shutdown. Disclose blockers, failed attempts, assumptions and limitations, including manual connector paths and any unverified evidence.
 - Read [README.md](README.md) for the detailed runtime contracts. If this guide and the current trusted implementation disagree, do not silently change policy or work around validation; report the discrepancy for owner review.
+
+
+## 6. Review bridge
+
+Use exact read-only commands in [Agent review bridge](README.md#agent-review-bridge). Match successful job JSON to the specific request, including Work, command, comment, run, attempt, base, PR and head where applicable. Snapshot is not verification or approval. Obtain VERIFIED evidence before requesting owner execution. Provide the exact digest, Work, PR/head for merge or acceptance evidence for closure. Do not dispatch write workflows on behalf of the owner, retry write failures automatically or use direct connector merge/close calls. Confirm actual resulting state before task shutdown.

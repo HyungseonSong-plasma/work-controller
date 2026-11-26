@@ -127,3 +127,57 @@ class CommentRequestTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 comment_request(self.repo)
             cycle.assert_not_called()
+
+
+    def test_review_commands_and_no_write(self):
+        from controller import review
+        from validation import merge, completion
+        from validation.model import digest
+        for command in ("/review merge snapshot 0", "/review completion snapshot ", "/review merge snapshot 4; echo x", "/review execute 4", "/review completion snapshot\n"):
+            with self.assertRaises(ValueError):
+                review.parse_command(command)
+        identity = self.identity()
+        data = {"work": 4, "base": self.sha, "head": "b"*40}
+        with patch.object(review, "current_main"), patch.object(merge, "read_snapshot", return_value=(data, {})), patch.object(merge, "verify_full", return_value=data) as full, patch.object(merge, "merge_approved") as write, patch.object(completion, "approved_close") as close:
+            result = review.preflight(self.repo, identity, "/review merge snapshot 5")
+            self.assertEqual(result["request"], dict(identity, command="/review merge snapshot 5", pr=5))
+            self.assertEqual(result["review_digest"], digest(data))
+            self.assertIsNone(result["execution"])
+            result = review.preflight(self.repo, identity, "/review merge verify 5 " + digest(data) + " " + data["head"])
+            self.assertEqual(result["state"], "VERIFIED")
+            full.assert_called_once_with(self.repo, 5, digest(data), data["head"], expected_work=4)
+            with self.assertRaises(ValueError):
+                review.preflight(self.repo, dict(identity, work=99), "/review merge snapshot 5")
+            with self.assertRaises(ValueError):
+                review.preflight(self.repo, dict(identity, base="c"*40), "/review merge snapshot 5")
+            write.assert_not_called()
+            close.assert_not_called()
+
+    def test_review_request_and_manual_boundary(self):
+        from controller import review
+        from validation import merge, completion
+        command = "/review completion snapshot"
+        event = self.event()
+        event["comment"]["body"] = command
+        identity = self.identity()
+        with patch.object(operation, "event_context", return_value=(event, self.sha, "owner", 99, 1)), patch.object(operation, "request_identity", return_value=identity) as check, patch.object(review, "preflight", return_value={"state": "SNAPSHOT"}) as preflight:
+            self.assertEqual(review.comment_request(self.repo), {"state": "SNAPSHOT"})
+            check.assert_called_once_with(self.repo, event, self.sha, "owner", 99, 1, command=command)
+            check.side_effect = ValueError("edited or unauthorized")
+            preflight.reset_mock()
+            with self.assertRaises(ValueError):
+                review.comment_request(self.repo)
+            preflight.assert_not_called()
+        manual = {"repository": {"full_name": self.repo}, "ref": "main", "sender": self.user}
+        with patch.object(review, "current_main"), patch.object(authority, "read_policy", return_value={"owner": "owner"}), patch.dict(os.environ, {"GITHUB_TRIGGERING_ACTOR": "owner"}), patch.object(merge, "merge_approved") as write, patch.object(completion, "approved_close") as close:
+            verified = review.manual_identity(self.repo, manual, self.sha, "owner", 99, 1)
+            for actor, attempt in (("other", 1), ("owner", 2)):
+                with self.assertRaises(ValueError):
+                    review.manual_identity(self.repo, manual, self.sha, actor, 99, attempt)
+            args = {"action": "close", "work": "4", "pr": "", "snapshot": "a"*64, "head": "", "evidence": ""}
+            with self.assertRaises(ValueError):
+                review.execute(self.repo, verified, args)
+            with self.assertRaises(ValueError):
+                review.execute(self.repo, verified, dict(args, action="merge", pr="5", head="bad"))
+            write.assert_not_called()
+            close.assert_not_called()

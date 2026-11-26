@@ -47,3 +47,30 @@ def verify(repo, number, approved, expected_head):
     if latest != current or latest_pr.get("mergeable_state") != "clean":
         raise ValueError("PR or Work changed during preflight")
     return latest
+
+
+def verify_full(repo, number, approved, expected_head, approved_change=None, expected_work=None):
+    """Read-only authority and snapshot checks shared by both execution paths."""
+    from . import approval, authority
+    data = verify(repo, number, approved, expected_head)
+    if expected_work is not None and data["work"] != expected_work:
+        raise ValueError("PR is not a Work Unit of the requesting Work")
+    evidence = approval.inspect_pr(repo, number, data["head"], data["base"])
+    if not evidence["allowed"]:
+        raise ValueError(evidence["reason"])
+    recorded = evidence.get("approval_digest")
+    if approved_change and approved_change != recorded:
+        raise ValueError("Supplied approval digest does not match recorded evidence")
+    permission = authority.inspect_pr(repo, number, data["head"], data["base"], recorded)
+    if not permission["allowed"]:
+        raise ValueError(permission["reason"])
+    return verify(repo, number, approved, expected_head)
+
+
+def merge_approved(repo, number, approved, expected_head, approved_change=None, expected_work=None):
+    data = verify_full(repo, number, approved, expected_head, approved_change, expected_work)
+    result = api(f"repos/{repo}/pulls/{number}/merge", "-X", "PUT",
+                 "-f", f"sha={data['head']}", "-f", "merge_method=squash")
+    if result.get("merged") is not True:
+        raise ValueError("GitHub rejected merge")
+    return result
