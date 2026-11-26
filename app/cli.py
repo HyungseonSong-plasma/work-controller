@@ -199,3 +199,5 @@ if __name__ == "__main__":
     except (ValueError, KeyError, TypeError, RuntimeError, subprocess.CalledProcessError) as exc:
         print(f"Contract command failed: {exc}", file=sys.stderr)
         sys.exit(1)
+
+# Disposable approval scope test; never merge.
