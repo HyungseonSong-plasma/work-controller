@@ -1,0 +1,30 @@
+name: Temporary completion integration
+on:
+  pull_request:
+    types: [opened]
+permissions:
+  contents: read
+  pull-requests: read
+  issues: read
+jobs:
+  exercise:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
+      - name: Exercise completion preflight against live data
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 validation/validate_completion.py --repo "$GITHUB_REPOSITORY" --work 25 > "$RUNNER_TEMP/review.json"
+          digest=$(jq -r .review_digest "$RUNNER_TEMP/review.json")
+          python3 validation/validate_completion.py --repo "$GITHUB_REPOSITORY" --work 25 --approved-snapshot "$digest"
+          if python3 validation/validate_completion.py --repo "$GITHUB_REPOSITORY" --work 27 > "$RUNNER_TEMP/rejected.json"; then
+            echo "Unexpected completion pass"
+            exit 1
+          fi
+          jq -e '.blockers | any(contains("still OPEN"))' "$RUNNER_TEMP/rejected.json"
+          jq -e '.blockers | any(contains("at least one valid merged"))' "$RUNNER_TEMP/rejected.json"
