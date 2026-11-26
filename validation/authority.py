@@ -9,7 +9,7 @@ from .model import SHA, api, pages, digest
 from .pr import work_number, work_errors
 
 POLICY_PATH = ".github/change-authority.json"
-ROOT_A = (POLICY_PATH, "validation/authority.py")
+ROOT_A = (POLICY_PATH, "validation/authority.py", ".github/workflows/grade-a.yml")
 GRADE_RANK = {"C": 0, "B": 1, "A": 2}
 
 
@@ -99,7 +99,7 @@ def decision(classification, required_approval=None, approved_change=None):
                 else "B: request explicit user approval before modification")
 
 
-def inspect_pr(repo, number, expected_head=None, expected_base=None, approved_change=None):
+def inspect_pr(repo, number, expected_head=None, expected_base=None, approved_change=None, grade_a_only=False):
     pr = api(f"repos/{repo}/pulls/{number}")
     head, base = pr["head"]["sha"], pr["base"]["sha"]
     if pr["state"] != "open" or pr["base"]["ref"] != "main" or pr["base"]["repo"]["full_name"].casefold() != repo.casefold():
@@ -110,15 +110,19 @@ def inspect_pr(repo, number, expected_head=None, expected_base=None, approved_ch
     files = pages(f"repos/{repo}/pulls/{number}/files?per_page=100")
     classification = classify(policy, changed_paths(files, pr["changed_files"]))
     required = None
-    if classification["grade"] == "B":
+    if classification["grade"] == "B" and not grade_a_only:
         work = work_number(pr.get("body"))
         issue = api(f"repos/{repo}/issues/{work}")
         required = approval_scope(repo, work, issue, policy, classification)
-    result = decision(classification, required, approved_change)
+    if grade_a_only:
+        result = dict(classification, allowed=classification['grade'] != 'A',
+                      reason='A-grade paths are protected' if classification['grade'] == 'A' else 'No A-grade paths')
+    else:
+        result = decision(classification, required, approved_change)
     fresh = api(f"repos/{repo}/pulls/{number}")
     if (fresh["state"] != "open" or fresh["head"]["sha"] != head or fresh["base"]["sha"] != base
             or fresh["base"]["ref"] != "main" or fresh["changed_files"] != pr["changed_files"]
-            or fresh.get("body") != pr.get("body")):
+            or (not grade_a_only and fresh.get("body") != pr.get("body"))):
         raise ValueError("PR changed during authority check")
     return dict(result, head=head, base=base)
 
@@ -177,3 +181,15 @@ class AuthorityTests(unittest.TestCase):
         with patch(__name__ + ".api", side_effect=RuntimeError("not available")):
             with self.assertRaises(ValueError):
                 read_policy("owner/repo", "a"*40)
+
+    def test_grade_a_gate(self):
+        pr = {"state": "open", "head": {"sha": "a"*40}, "base": {"sha": "b"*40, "ref": "main", "repo": {"full_name": "owner/repo"}}, "changed_files": 1}
+        for path, allowed in [("README.md", True), ("validation/pr.py", True), (POLICY_PATH, False), (".github/workflows/grade-a.yml", False), ("validation/authority.py", False)]:
+            with patch(__name__ + ".api", side_effect=[pr, pr]), patch(__name__ + ".read_policy", return_value=self.policy), patch(__name__ + ".pages", return_value=[{"filename": path, "status": "modified"}]):
+                self.assertEqual(inspect_pr("owner/repo", 1, "a"*40, "b"*40, grade_a_only=True)["allowed"], allowed)
+        with patch(__name__ + ".api", side_effect=[pr, pr]), patch(__name__ + ".read_policy", return_value=self.policy), patch(__name__ + ".pages", return_value=[]):
+            with self.assertRaises(ValueError):
+                inspect_pr("owner/repo", 1, grade_a_only=True)
+        with patch(__name__ + ".api", return_value=pr), patch(__name__ + ".read_policy", side_effect=ValueError("No policy")):
+            with self.assertRaises(ValueError):
+                inspect_pr("owner/repo", 1, grade_a_only=True)
