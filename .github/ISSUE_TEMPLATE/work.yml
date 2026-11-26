@@ -1,0 +1,24 @@
+name: Work
+description: Define one complete unit of work.
+body:
+  - type: textarea
+    id: objective
+    attributes:
+      label: Objective
+      description: What outcome is needed, and why?
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: What is included and, where needed, excluded?
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: State observable conditions for closing this Work.
+    validations:
+      required: true
