@@ -246,10 +246,22 @@ def review_command(argv):
 def cleanup_command(argv):
     parser = argparse.ArgumentParser(prog="cleanup", description="Read-only manifest unless an approved digest is provided by trusted cleanup CI.")
     parser.add_argument("--repo", required=True)
-    parser.add_argument("--kind", choices=("branches", "runs"), required=True)
-    parser.add_argument("--approved-manifest", help="Exact reviewed SHA-256; owner dispatch for history. Set POST_WORK_CLEANUP_SINCE to a UTC activation timestamp for future automatic cleanup.")
+    parser.add_argument("--kind", choices=("branches", "runs"))
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--approved-manifest", help="Exact reviewed SHA-256; owner dispatch for history. Set POST_WORK_CLEANUP_SINCE for automatic cleanup.")
+    mode.add_argument("--comment-plan", action="store_true", help="Trusted read-only /cleanup plan request")
+    mode.add_argument("--execute-request", action="store_true", help="Trusted opt-in /execute-cleanup request")
     args = parser.parse_args(argv)
-    print(json.dumps(cleanup.run(args.repo, args.kind, args.approved_manifest), indent=2, ensure_ascii=False))
+    if args.comment_plan:
+        if args.kind:
+            parser.error("Comment plan inventories both kinds")
+        result = cleanup.delegated_plan(args.repo)
+    else:
+        if not args.kind:
+            parser.error("--kind required")
+        result = (cleanup.delegated_execute(args.repo, args.kind) if args.execute_request
+                  else cleanup.run(args.repo, args.kind, args.approved_manifest))
+    print(json.dumps(result, indent=2, ensure_ascii=False))
 
 
 COMMANDS = {"cleanup": cleanup_command, "review": review_command, "operation": operation_command, "executor-live-ci": executor_live_ci_command, "executor": executor_command, "approval": approval_command, "authority": authority_command, "issue": issue_command, "pr": pr_command, "merge": merge_command,

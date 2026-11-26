@@ -145,6 +145,143 @@ class CleanupTests(unittest.TestCase):
             api.assert_not_called()
 
 
+    def test_delegation_command_exact(self):
+        command = "/execute-cleanup 123 456 branches " + "a" * 64 + " " + "b" * 40
+        self.assertEqual(cleanup.parse_delegation(command), (123, 456, "branches", "a" * 64, "b" * 40))
+        for value in (command + "\n", command.replace("branches", "tags"), command.replace("123", "0123"),
+                      command.replace("a" * 64, "A" * 64), command + " extra"):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                cleanup.parse_delegation(value)
+
+    def test_delegation_disabled_no_io(self):
+        with patch.dict("os.environ", {}, clear=True), patch.object(cleanup.operation, "event_context") as event, \
+                patch.object(cleanup, "apply") as apply:
+            with self.assertRaisesRegex(ValueError, "disabled"):
+                cleanup.delegated_execute("example/test", "branches")
+            event.assert_not_called()
+            apply.assert_not_called()
+
+    def test_comment_job_and_rerun_rejected(self):
+        with patch.dict("os.environ", {"GITHUB_JOB": "wrong"}, clear=True), \
+                patch.object(cleanup.operation, "event_context") as event:
+            with self.assertRaisesRegex(ValueError, "job mismatch"):
+                cleanup.comment_context("example/test", cleanup.PLAN_COMMAND, "delegated-plan")
+            event.assert_not_called()
+        with patch.dict("os.environ", {"GITHUB_JOB": "delegated-plan", "GITHUB_TRIGGERING_ACTOR": "owner"}), \
+                patch.object(cleanup.operation, "event_context", return_value=({}, "a"*40, "owner", 1, 2)), \
+                patch.object(cleanup.operation, "request_identity") as identity:
+            with self.assertRaisesRegex(ValueError, "initial"):
+                cleanup.comment_context("example/test", cleanup.PLAN_COMMAND, "delegated-plan")
+            identity.assert_not_called()
+
+    def test_delegation_history_replay(self):
+        ctx = {"root": "repos/example/test", "run": 2}
+        earlier = {"id": 1, "run_attempt": 1, "created_at": "2026-01-01T00:01:00Z", "status": "completed"}
+        current = {"id": 2, "run_attempt": 1, "created_at": "2026-01-01T00:02:00Z", "status": "in_progress"}
+        for conclusion in ("success", "failure", "cancelled"):
+            with self.subTest(conclusion=conclusion), patch.object(cleanup, "counted", side_effect=[
+                    [earlier, current], [{"name": "delegated-branches", "conclusion": conclusion}]]):
+                with self.assertRaisesRegex(ValueError, "consumed"):
+                    cleanup.guard_delegated_history(ctx, "2026-01-01T00:00:00Z")
+        with patch.object(cleanup, "counted", side_effect=[
+                [earlier, current], [{"name": "delegated-plan", "conclusion": "success"}]]):
+            cleanup.guard_delegated_history(ctx, "2026-01-01T00:00:00Z")
+        with patch.object(cleanup, "counted", return_value=[earlier]):
+            with self.assertRaisesRegex(ValueError, "missing"):
+                cleanup.guard_delegated_history(ctx, "2026-01-01T00:00:00Z")
+
+    def test_delegated_execute_exact_kind_and_manifest(self):
+        base = "b"*40
+        ctx = {"base": base, "run": 22, "automatic": False, "since": ""}
+        identity = {"base": base, "run": 22}
+        for kind in ("branches", "runs"):
+            reviewed = {"targets": [{"id": 1}], "kind": kind}
+            checksum = digest(reviewed)
+            command = f"/execute-cleanup 10 11 {kind} {checksum} {base}"
+            event = {"comment": {"body": command}}
+            fresh = {"manifest": reviewed, "digest": checksum}
+            with self.subTest(kind=kind), patch.dict("os.environ", {"AGENT_CLEANUP_DELEGATION": "v1"}), \
+                    patch.object(cleanup.operation, "event_context", return_value=(event, base, "owner", 22, 1)), \
+                    patch.object(cleanup, "comment_context", return_value=identity), \
+                    patch.object(cleanup, "context", return_value=ctx), \
+                    patch.object(cleanup, "verify_plan", return_value=(reviewed, "2026-01-01T00:00:00Z")) as verify, \
+                    patch.object(cleanup, "guard_delegated_history"), \
+                    patch.object(cleanup, "manifest", return_value=fresh) as manifest, \
+                    patch.object(cleanup, "apply", return_value={"state": "CLEANED", "deleted": []}) as apply, \
+                    patch("builtins.print"):
+                result = cleanup.delegated_execute("example/test", kind)
+                self.assertEqual(result["kind"], kind)
+                self.assertEqual(result["plan_job"], 11)
+                self.assertEqual(verify.call_count, 2)
+                apply.assert_called_once()
+                apply.reset_mock()
+                manifest.return_value = {"manifest": {"targets": []}, "digest": checksum}
+                with self.assertRaisesRegex(ValueError, "manifest changed"):
+                    cleanup.delegated_execute("example/test", kind)
+                apply.assert_not_called()
+                with self.assertRaisesRegex(ValueError, "kind mismatch"):
+                    cleanup.delegated_execute("example/test", "runs" if kind == "branches" else "branches")
+                apply.assert_not_called()
+                verify.side_effect = ValueError("artifact integrity")
+                with self.assertRaisesRegex(ValueError, "artifact integrity"):
+                    cleanup.delegated_execute("example/test", kind)
+                apply.assert_not_called()
+
+    def test_verify_plan_evidence_bindings(self):
+        now = cleanup.dt.datetime.now(cleanup.dt.timezone.utc).replace(microsecond=0)
+        at = lambda seconds: (now - cleanup.dt.timedelta(seconds=seconds)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        base = "b"*40
+        ctx = {"root": "repos/example/test", "repo": "example/test", "owner": "owner", "id": 1, "base": base}
+        identity = {"work": 102, "comment": 21, "created_at": at(5)}
+        run = {"id": 10, "path": cleanup.WORKFLOW, "event": "issue_comment", "status": "completed",
+               "conclusion": "success", "run_attempt": 1, "head_branch": "main", "head_sha": base,
+               "repository": {"id": 1}, "head_repository": {"id": 1}, "actor": {"login": "owner"},
+               "triggering_actor": {"login": "owner"}, "created_at": at(60)}
+        job = {"id": 11, "name": "delegated-plan", "run_id": 10, "run_attempt": 1, "head_sha": base,
+               "status": "completed", "conclusion": "success", "started_at": at(50), "completed_at": at(10)}
+        source = {"id": 20, "issue_url": "https://api.github.com/repos/example/test/issues/102",
+                  "body": cleanup.PLAN_COMMAND, "user": {"login": "owner"}, "created_at": at(65), "updated_at": at(65)}
+        reports = {}
+        for kind in ("branches", "runs"):
+            plan = {"repository": "example/test", "base": base, "kind": kind, "since": "",
+                    "targets": [{"id": 1}] if kind == "branches" else []}
+            reports[kind] = {"state": "PLANNED", "mode": "read-only", "automatic": False,
+                             "manifest": plan, "digest": digest(plan)}
+        report = {"repository": "example/test", "state": "PLANNED", "mode": "read-only", "execution": None,
+                  "request": {"work": 102, "run": 10, "attempt": 1, "base": base, "comment": 20,
+                              "command": cleanup.PLAN_COMMAND, "actor": "owner", "created_at": at(65)},
+                  "generated_at": at(15), "reports": reports}
+        checksum = reports["branches"]["digest"]
+        import copy
+        cases = [("valid", None, None), ("actor", ("run", "actor"), {"login": "other"}),
+                 ("ref", ("run", "head_branch"), "other"), ("job", ("job", "name"), "branches"),
+                 ("job id", ("job", "id"), 12), ("run id", ("run", "id"), 12),
+                 ("attempt", ("run", "run_attempt"), 2), ("stale", ("job", "completed_at"), at(1900)),
+                 ("work", ("request", "work"), 103), ("edited", ("source", "updated_at"), at(4)),
+                 ("digest", ("branch_report", "digest"), "a"*64),
+                 ("mode", ("report", "mode"), "write"), ("base", ("request", "base"), "c"*40)]
+        for label, key, value in cases:
+            rr, jj, ss, evidence = copy.deepcopy((run, job, source, report))
+            parts = {"run": rr, "job": jj, "source": ss, "report": evidence,
+                     "request": evidence["request"], "branch_report": evidence["reports"]["branches"]}
+            if key:
+                parts[key[0]][key[1]] = value
+            with self.subTest(label=label), patch.object(cleanup, "api", side_effect=[rr, ss]), \
+                    patch.object(cleanup, "counted", return_value=[jj]), \
+                    patch.object(cleanup.review, "read_review_artifact", return_value=evidence):
+                if key is None:
+                    self.assertEqual(cleanup.verify_plan(ctx, identity, 10, 11, "branches", checksum),
+                                     (reports["branches"]["manifest"], at(10)))
+                else:
+                    with self.assertRaises(ValueError):
+                        cleanup.verify_plan(ctx, identity, 10, 11, "branches", checksum)
+        with patch.object(cleanup, "api", side_effect=[run, source]), \
+                patch.object(cleanup, "counted", return_value=[job]), \
+                patch.object(cleanup.review, "read_review_artifact", return_value=report):
+            with self.assertRaisesRegex(ValueError, "empty targets"):
+                cleanup.verify_plan(ctx, identity, 10, 11, "runs", reports["runs"]["digest"])
+
+
 class CleanupLifecycleTests(unittest.TestCase):
     def setUp(self):
         self.ctx = {"repo": "example/test", "root": "repos/example/test", "id": 1,

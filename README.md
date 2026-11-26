@@ -312,3 +312,8 @@ After owner activation, the artifact-based Close path completed the following in
 | #89 | [45900875023](https://github.com/HyungseonSong-plasma/work-controller/actions/runs/45900875023) | [140186454243](https://github.com/HyungseonSong-plasma/work-controller/actions/runs/45900999016/job/140186454243) |
 
 These executions exercised the structured evidence transport, current-run and artifact validation, and the existing Completion contract. They supersede the failed log-retrieval attempt as positive evidence, not as a retry of that request. They do not prove independent human identity, server-side enforcement against other writers, or automatic downstream event delivery. Delegated Merge requires its own matching live execution evidence; a successful C-rank Merge would not establish live delegated B-rank Merge. Use Work #100 and #96 for the separately reviewed Merge evidence rather than assuming success from this document or CI.
+
+
+### Interactive cleanup delegation
+
+On an open Implementation Work, request `/cleanup plan` and review the successful `delegated-plan` job's exact current-main manifest. Owner opt-in: set the Actions variable `AGENT_CLEANUP_DELEGATION=v1` (default off). After explicit interactive approval of the exact kind, digest, base and evidence, post one `/execute-cleanup RUN JOB KIND DIGEST BASE` comment. KIND is branches or runs. Match the execution trace and actual readback. No scheduled delegation or raw deletion; inspect partial failures before fresh review. Same-account attribution is not independent human approval. See the trusted cleanup workflow and controller implementation for validation; automatic lifecycle activation remains separate.

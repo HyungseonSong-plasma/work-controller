@@ -8,6 +8,7 @@ import sys
 import time
 from urllib.parse import quote, urlencode
 
+from controller import operation, review
 from validation import authority, completion, issue, pr
 from validation.model import REPO, SHA, api, digest
 
@@ -120,7 +121,7 @@ def current_main(root):
     return api(root + "/branches/main")["commit"]["sha"]
 
 
-def context(repo, kind, approved):
+def context(repo, kind, approved, comment_mode=False):
     if (not REPO.fullmatch(repo) or kind not in {"branches", "runs"}
             or os.environ.get("GITHUB_ACTIONS") != "true"
             or os.environ.get("GITHUB_REPOSITORY") != repo
@@ -154,6 +155,9 @@ def context(repo, kind, approved):
                            for k in ("GITHUB_ACTOR", "GITHUB_TRIGGERING_ACTOR"))
                     or event.get("sender", {}).get("login", "").casefold() != owner):
                 raise ValueError("Historical deletion requires matching owner dispatch digest")
+    elif name == "issue_comment" and comment_mode:
+        cutoff = None
+        since = ""
     elif name == "pull_request_target":
         p = event.get("pull_request") or {}
         if (event.get("action") != "closed" or p.get("merged") is not True
@@ -405,7 +409,7 @@ def delete_run(ctx, target):
         raise ValueError("Repository readback failed")
 
 
-def apply(ctx, kind, report, approved):
+def apply(ctx, kind, report, approved, guard=None):
     if report["digest"] != approved or digest(report["manifest"]) != approved:
         raise ValueError("Reviewed cleanup manifest changed")
     auto_history(ctx)
@@ -422,6 +426,8 @@ def apply(ctx, kind, report, approved):
             fresh, reason = run_target(ctx, cat, run)
         if fresh != target or reason or current_main(ctx["root"]) != ctx["base"]:
             raise ValueError("Reviewed target changed; stop cleanup: " + str(reason))
+        if guard is not None:
+            guard()
         print(json.dumps({"state": "DELETING", "target": target}), flush=True)
         if kind == "branches":
             delete_branch(ctx, target)
@@ -438,3 +444,159 @@ def run(repo, kind, approved=None):
     if not approved:
         return report
     return apply(ctx, kind, report, approved)
+
+
+PLAN_COMMAND = "/cleanup plan"
+EXEC_COMMAND = re.compile(r"/execute-cleanup ([1-9][0-9]*) ([1-9][0-9]*) (branches|runs) ([0-9a-f]{64}) ([0-9a-f]{40})")
+DELEGATED_JOB = {"branches": "delegated-branches", "runs": "delegated-runs"}
+APPLY_JOBS = {"branches", "runs", *DELEGATED_JOB.values()}
+
+
+def parse_delegation(command):
+    match = EXEC_COMMAND.fullmatch(command) if isinstance(command, str) and len(command) <= 256 else None
+    if not match:
+        raise ValueError("Invalid cleanup execution command")
+    return int(match[1]), int(match[2]), match[3], match[4], match[5]
+
+
+def comment_context(repo, command, job):
+    if os.environ.get("GITHUB_JOB") != job:
+        raise ValueError("Cleanup request/job mismatch")
+    event, sha, actor, run_id, attempt = operation.event_context(repo, "issue_comment")
+    if attempt != 1 or os.environ.get("GITHUB_TRIGGERING_ACTOR", "").casefold() != actor.casefold():
+        raise ValueError("Cleanup requires initial owner-attributed request")
+    identity = operation.request_identity(repo, event, sha, actor, run_id, attempt, command=command)
+    w = api(f"repos/{repo}/issues/{identity['work']}")
+    if w.get("state") != "open" or not issue.validate(w.get("body")) or issue.work_type(w["body"]) != "Implementation":
+        raise ValueError("Cleanup requires an open Implementation Work")
+    identity = dict(identity, actor=actor, command=command, created_at=event["comment"]["created_at"])
+    return identity
+
+
+def delegated_plan(repo):
+    identity = comment_context(repo, PLAN_COMMAND, "delegated-plan")
+    reports = {}
+    for kind in DELEGATED_JOB:
+        ctx = context(repo, kind, None, comment_mode=True)
+        if ctx["base"] != identity["base"] or ctx["run"] != identity["run"] or ctx["automatic"] or ctx["since"]:
+            raise ValueError("Cleanup plan identity mismatch")
+        reports[kind] = manifest(ctx, kind)
+    if comment_context(repo, PLAN_COMMAND, "delegated-plan") != identity:
+        raise ValueError("Cleanup plan request changed")
+    report = {"repository": repo, "state": "PLANNED", "mode": "read-only", "execution": None,
+              "request": identity, "generated_at": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+              "reports": reports}
+    if len(json.dumps(report, indent=2, ensure_ascii=False).encode()) + 1 > review.MAX_REVIEW_JSON:
+        raise ValueError("Cleanup plan evidence too large")
+    return report
+
+
+def verify_plan(ctx, identity, plan_run, plan_job, kind, approved):
+    root, owner = ctx["root"], ctx["owner"]
+    run = api(f"{root}/actions/runs/{plan_run}")
+    if (run.get("id") != plan_run or run.get("path") != WORKFLOW or run.get("event") != "issue_comment"
+            or run.get("status") != "completed" or run.get("conclusion") != "success"
+            or run.get("run_attempt") != 1 or run.get("head_branch") != "main" or run.get("head_sha") != ctx["base"]
+            or (run.get("repository") or {}).get("id") != ctx["id"]
+            or (run.get("head_repository") or {}).get("id") != ctx["id"]
+            or any((run.get(k) or {}).get("login", "").casefold() != owner for k in ("actor", "triggering_actor"))):
+        raise ValueError("Invalid cleanup evidence run")
+    jobs = counted(f"{root}/actions/runs/{plan_run}/jobs?filter=all&per_page=100", "jobs")
+    matches = [j for j in jobs if j["id"] == plan_job]
+    if (len(matches) != 1 or any(j.get("name") != "delegated-plan" and j.get("conclusion") != "skipped" for j in jobs)):
+        raise ValueError("Cleanup evidence is not an exclusively read-only plan")
+    job = matches[0]
+    if (job.get("name") != "delegated-plan" or job.get("run_id") != plan_run
+            or job.get("run_attempt") != 1 or job.get("head_sha") != ctx["base"]
+            or job.get("status") != "completed" or job.get("conclusion") != "success"):
+        raise ValueError("Invalid cleanup evidence job")
+    completed = timestamp(job["completed_at"])
+    request_time = timestamp(identity["created_at"])
+    now = dt.datetime.now(dt.timezone.utc)
+    if not completed < request_time <= now or now - completed > dt.timedelta(minutes=30):
+        raise ValueError("Cleanup evidence expired or request predates completed plan")
+    # Existing transport authenticates the GitHub origin and archive hash and
+    # decodes only a bounded single review.json, without extracting files.
+    report = review.read_review_artifact(ctx["repo"], run)
+    if (report.get("repository") != ctx["repo"] or report.get("state") != "PLANNED"
+            or report.get("mode") != "read-only" or "execution" not in report or report["execution"] is not None):
+        raise ValueError("Invalid cleanup evidence report")
+    request = report["request"]
+    if (request.get("work") != identity["work"] or request.get("run") != plan_run or request.get("attempt") != 1
+            or request.get("base") != ctx["base"] or request.get("command") != PLAN_COMMAND
+            or request.get("actor", "").casefold() != owner or request.get("comment") == identity["comment"]):
+        raise ValueError("Cleanup evidence request mismatch")
+    source = api(f"{root}/issues/comments/{number(request['comment'])}")
+    expected_url = f"https://api.github.com/{root}/issues/{identity['work']}"
+    if (source.get("id") != request["comment"] or source.get("issue_url", "").casefold() != expected_url.casefold()
+            or source.get("body") != PLAN_COMMAND or (source.get("user") or {}).get("login", "").casefold() != owner
+            or not source.get("created_at") or source["created_at"] != source.get("updated_at")
+            or source["created_at"] != request.get("created_at")
+            or not timestamp(source["created_at"]) <= timestamp(run["created_at"]) <= timestamp(job["started_at"])
+            <= timestamp(report["generated_at"]) <= completed):
+        raise ValueError("Cleanup evidence comment changed or unrelated")
+    reports = report["reports"]
+    if set(reports) != set(DELEGATED_JOB):
+        raise ValueError("Missing cleanup evidence manifests")
+    for name, item in reports.items():
+        plan = item["manifest"]
+        targets = plan.get("targets")
+        if (item.get("state") != "PLANNED" or item.get("mode") != "read-only" or item.get("automatic") is not False
+                or plan.get("repository") != ctx["repo"] or plan.get("base") != ctx["base"]
+                or plan.get("kind") != name or plan.get("since") != ""
+                or not isinstance(targets, list) or len(targets) > LIMIT
+                or digest(plan) != item.get("digest")):
+            raise ValueError("Invalid cleanup evidence manifest")
+    selected = reports[kind]
+    if selected["digest"] != approved or not selected["manifest"]["targets"]:
+        raise ValueError("Cleanup evidence digest mismatch or empty targets")
+    return selected["manifest"], job["completed_at"]
+
+
+def guard_delegated_history(ctx, completed):
+    history = counted(ctx["root"] + "/actions/workflows/post-work-cleanup.yml/runs?" +
+                      urlencode({"created": ">=" + completed, "per_page": 100}), "workflow_runs")
+    current = [r for r in history if r["id"] == ctx["run"]]
+    if len(current) != 1 or current[0].get("run_attempt") != 1:
+        raise ValueError("Current delegated cleanup missing from history")
+    start = timestamp(current[0]["created_at"])
+    for run in history:
+        if run["id"] == ctx["run"] or timestamp(run["created_at"]) > start:
+            continue
+        if run.get("status") != "completed":
+            raise ValueError("Earlier cleanup unresolved; obtain fresh plan")
+        jobs = counted(ctx["root"] + f"/actions/runs/{number(run['id'])}/jobs?filter=all&per_page=100", "jobs")
+        if not jobs or any(j.get("name") in APPLY_JOBS and j.get("conclusion") != "skipped" for j in jobs):
+            raise ValueError("Earlier cleanup apply attempt consumed evidence; obtain fresh plan")
+
+
+def delegated_execute(repo, kind):
+    if os.environ.get("AGENT_CLEANUP_DELEGATION") != "v1":
+        raise ValueError("Agent cleanup delegation is disabled")
+    event, _, _, _, _ = operation.event_context(repo, "issue_comment")
+    command = event["comment"]["body"]
+    plan_run, plan_job, expected_kind, approved, base = parse_delegation(command)
+    if kind != expected_kind or kind not in DELEGATED_JOB:
+        raise ValueError("Cleanup kind mismatch")
+    identity = comment_context(repo, command, DELEGATED_JOB[kind])
+    ctx = context(repo, kind, None, comment_mode=True)
+    if base != ctx["base"] or base != identity["base"] or ctx["run"] != identity["run"] or ctx["automatic"] or ctx["since"]:
+        raise ValueError("Cleanup execution base or context mismatch")
+    reviewed, completed = verify_plan(ctx, identity, plan_run, plan_job, kind, approved)
+    guard_delegated_history(ctx, completed)
+    fresh = manifest(ctx, kind)
+    if fresh["manifest"] != reviewed or fresh["digest"] != approved:
+        raise ValueError("Reviewed cleanup manifest changed")
+
+    def guard():
+        if comment_context(repo, command, DELEGATED_JOB[kind]) != identity:
+            raise ValueError("Cleanup execution request changed")
+
+    guard()
+    if verify_plan(ctx, identity, plan_run, plan_job, kind, approved) != (reviewed, completed):
+        raise ValueError("Cleanup evidence changed")
+    guard_delegated_history(ctx, completed)
+    trace = {"request": identity, "plan_run": plan_run, "plan_job": plan_job,
+             "kind": kind, "digest": approved}
+    print(json.dumps(dict(trace, state="AUTHORIZED")), flush=True)
+    return dict(apply(ctx, kind, fresh, approved, guard=guard), **trace)
