@@ -46,24 +46,57 @@ def local(side, repo_id):
     return isinstance(side, dict) and (side.get("repo") or {}).get("id") == repo_id
 
 
+class DuplicateEnumeration(ValueError):
+    """A changing read-only collection may be retried, not deduplicated."""
+
+
 def unique(items, key):
     if not isinstance(items, list) or any(not isinstance(x, dict) or key not in x for x in items):
         raise ValueError("Invalid enumeration")
     values = [x[key] for x in items]
-    if len(set(values)) != len(values):
-        raise ValueError("Duplicate identities in enumeration")
+    if key == "name":
+        if any(not isinstance(v, str) or not v for v in values):
+            raise ValueError("Invalid enumeration identity: name")
+    elif key in {"id", "number"}:
+        if any(type(v) is not int or v < 1 for v in values):
+            raise ValueError(f"Invalid enumeration identity: {key}")
+    else:
+        raise ValueError("Unsupported enumeration identity key")
+    seen, duplicates = set(), set()
+    for value in values:
+        if value in seen:
+            duplicates.add(value)
+        seen.add(value)
+    if duplicates:
+        sample = [str(v)[:160] if key == "name" else v for v in sorted(duplicates)[:10]]
+        raise DuplicateEnumeration(
+            f"Duplicate identities in enumeration: key={key}, duplicate_count={len(duplicates)}, "
+            f"duplicate_ids={sample!r}, collected={len(items)}")
     return items
 
 
+def retry_read(reason, attempt):
+    message = f"{reason}, attempt={attempt}/3"
+    if attempt == 3:
+        raise ValueError(message)
+    print(message + "; restarting read-only enumeration", file=sys.stderr, flush=True)
+    time.sleep(attempt)
+
+
 def listed(path, key):
-    pages = api(path, "--paginate", "--slurp")
-    if not isinstance(pages, list) or not pages or any(not isinstance(p, list) for p in pages):
-        raise ValueError("Incomplete array pagination")
-    return unique([x for page in pages for x in page], key)
+    for attempt in range(1, 4):
+        pages = api(path, "--paginate", "--slurp")
+        if not isinstance(pages, list) or not pages or any(not isinstance(p, list) for p in pages):
+            raise ValueError(f"Incomplete array pagination: {path}")
+        try:
+            return unique([x for page in pages for x in page], key)
+        except DuplicateEnumeration as exc:
+            retry_read(f"{exc}; endpoint={path}, page_counts={[len(p) for p in pages[:20]]}, "
+                       f"pages={len(pages)}", attempt)
 
 
 def counted(path, field):
-    """Restart an inconsistent counted GET; never use partial or combined results."""
+    """Restart inconsistent counted GETs; never use partial or combined results."""
     for attempt in range(1, 4):
         pages = api(path, "--paginate", "--slurp")
         if not isinstance(pages, list) or not pages or any(
@@ -71,17 +104,33 @@ def counted(path, field):
                 or p["total_count"] < 0 or not isinstance(p.get(field), list)
                 for p in pages):
             raise ValueError(f"Incomplete counted pagination: {path}, field={field}")
-        items = unique([x for p in pages for x in p[field]], "id")
+        counts = [(p["total_count"], len(p[field])) for p in pages[:20]]
+        try:
+            items = unique([x for p in pages for x in p[field]], "id")
+        except DuplicateEnumeration as exc:
+            retry_read(f"{exc}; endpoint={path}, field={field}, "
+                       f"page (total, fetched) counts={counts}, pages={len(pages)}", attempt)
+            continue
         if all(p["total_count"] == len(items) for p in pages):
             return items
-        counts = [(p["total_count"], len(p[field])) for p in pages]
-        reason = (f"Counted enumeration changed or truncated: {path}, field={field}, "
-                  f"page (total, fetched) counts={counts}, collected={len(items)}, "
-                  f"attempt={attempt}/3")
-        if attempt == 3:
-            raise ValueError(reason)
-        print(reason + "; restarting read-only enumeration", file=sys.stderr, flush=True)
-        time.sleep(attempt)
+        retry_read(f"Counted enumeration changed or truncated: {path}, field={field}, "
+                   f"page (total, fetched) counts={counts}, collected={len(items)}, "
+                   f"pages={len(pages)}", attempt)
+
+
+def terminal_runs(ctx):
+    """Restart the entire status group if a run changes status between queries."""
+    endpoint = ctx["root"] + "/actions/runs"
+    for attempt in range(1, 4):
+        groups = {state: counted(endpoint + "?" + urlencode({"status": state, "per_page": 100}),
+                                 "workflow_runs") for state in sorted(TERMINAL)}
+        counts = {state: len(rows) for state, rows in groups.items()}
+        try:
+            items = unique([x for rows in groups.values() for x in rows], "id")
+        except DuplicateEnumeration as exc:
+            retry_read(f"{exc}; endpoint={endpoint}, terminal status counts={counts}", attempt)
+            continue
+        return sorted(items, key=lambda x: x["id"])
 
 
 def run_is_disposable(run, jobs, artifacts):
@@ -340,10 +389,7 @@ def manifest(ctx, kind):
         evaluate = lambda x: branch_target(ctx, cat, x, active)
         key = "name"
     else:
-        items = sorted((x for state in sorted(TERMINAL) for x in counted(
-            ctx["root"] + "/actions/runs?" + urlencode({"status": state, "per_page": 100}),
-            "workflow_runs")), key=lambda x: x["id"])
-        unique(items, "id")
+        items = terminal_runs(ctx)
         evaluate = lambda x: run_target(ctx, cat, x)
         key = "id"
     eligible, excluded = [], []
