@@ -92,11 +92,17 @@ Owner-controlled policy lives in `.github/change-authority.json`. **The owner mu
 }
 ```
 
-Exact paths and directory prefixes ending in / are supported. Highest grade wins across all changed paths, including both sides of a rename. Policy and authority evaluator are always A, regardless of configured patterns. A controls all promotion/demotion. B requires user approval before implementation as an operating rule, and independent owner approval of the exact PR head for automated merge. C follows ordinary contracts.
+Exact paths and directory prefixes ending in / are supported. Highest grade wins, including both sides of a rename. Policy and authority evaluator are always A. Promotion/demotion is owner-only.
+
+- A: ChatGPT may propose changes, but the user modifies the files personally. Automated merge is denied.
+- B: ChatGPT must present the Work, intended change and affected B paths and obtain explicit user approval in conversation **before modifying files**. After approval, normal implementation and merge procedures apply, just as for C. No separate GitHub reviewer or agent account is required.
+- C: autonomous modification within the approved Work, subject to ordinary contracts.
 
 ```sh
-python3 -m app.cli authority --repo OWNER/REPO --path validation/pr.py README.md
-python3 -m app.cli authority --repo OWNER/REPO --pr NUMBER
+python3 -m app.cli authority --repo OWNER/REPO --work NUMBER --path validation/pr.py README.md
+python3 -m app.cli authority --repo OWNER/REPO --pr NUMBER --approved-change DIGEST
 ```
 
-Planning is advisory until an executor integrates the path gate. The unified `merge --merge` path requires the trusted-base policy, full PR file enumeration, and authority decision; A always refuses automated merge, B requires a current independent GitHub owner APPROVED review, and C proceeds only after other merge checks. Missing/invalid policy fails closed. The same-account GitHub connector cannot supply an independent owner review of its own PR; use the user's direct UI merge or establish a distinct agent identity. Direct GitHub UI/API and raw connector writes are not intercepted by this operational gate. Native server-side protection of all A/B paths requires separate trusted identity and enforcement; do not claim this is achieved by the CLI. The owner must install the policy before using automated merge. Test: `python3 -m app.cli test authority`.
+The path plan returns an approval digest for B. It binds repository, Work number/title/body, policy and the exact B path set. It is a scope identifier, **not proof of approval**; ChatGPT must not pass it as approved without a real user decision. If B paths, Work description, policy or the approved intent changes, request approval again. Unrelated C paths do not change the digest, but still must remain within Work scope.
+
+The unified `merge --merge` path requires the trusted-base policy and complete file enumeration. For B, supply `--approved-change DIGEST` only after actual user approval. A is denied; C needs no B approval. Existing merge preflight and explicit merge authorization still apply. Missing/invalid policy fails closed. Pre-write enforcement remains an operating rule until an executor integrates the gate; raw connector writes and native GitHub UI/API are not intercepted. The user retains direct manual merge authority. The CLI verifies scope consistency, not user identity or semantic consent. The owner must install the policy before automated merge. Test: `python3 -m app.cli test authority`.
