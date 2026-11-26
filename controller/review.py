@@ -334,12 +334,12 @@ def verified_reference(repo, identity, review_run, job_id, inputs, requested_at,
 def guard_prior_dispatches(repo, identity, completed_at):
     """Conservative replay guard using existing Actions history, not an approval store.
 
-    Any earlier non-skipped delegated run since verification consumes the slot,
+    Any earlier non-skipped execution run since verification consumes the slot,
     even on a different Work. Missing, ambiguous, or deleted history is not
     durable proof of uniqueness against privileged GitHub writers.
     """
     root = f"repos/{repo}"
-    query = urlencode({"event": "issue_comment", "created": ">=" + completed_at, "per_page": 100})
+    query = urlencode({"created": ">=" + completed_at, "per_page": 100})
     history = api(f"{root}/actions/workflows/review-execute.yml/runs?{query}")
     runs = history.get("workflow_runs", [])
     if history.get("total_count") != len(runs) or len(runs) > 100:

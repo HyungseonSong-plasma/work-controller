@@ -30,11 +30,11 @@ on:
         type: string
         default: ''
 permissions: {}
-concurrency:
-  group: review-execute
-  cancel-in-progress: false
 jobs:
   merge:
+    concurrency:
+      group: review-execute
+      cancel-in-progress: false
     env:
       REVIEW_ACTION: merge
     if: >-
@@ -63,6 +63,9 @@ jobs:
           AGENT_REVIEW_DELEGATION: ${{ vars.AGENT_REVIEW_DELEGATION }}
         run: python3 -m app.cli review --repo "$GITHUB_REPOSITORY" --execute-request
   close:
+    concurrency:
+      group: review-execute
+      cancel-in-progress: false
     env:
       REVIEW_ACTION: close
     if: >-
