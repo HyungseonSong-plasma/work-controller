@@ -1,0 +1,389 @@
+{
+  "version": 1,
+  "target": "validation.issue",
+  "cases": [
+    {
+      "name": "valid_1",
+      "function": "validate",
+      "args": [
+        "### Work type\n\nImplementation\n\n### Objective\n\nImplement X\n\n### Scope\n\n#### Constraints\n\n- X only\n\n#### Actions\n\n- Implement X\n\n### Acceptance criteria\n\n- X passes"
+      ],
+      "assert": {
+        "op": "true"
+      }
+    },
+    {
+      "name": "valid_2",
+      "function": "validate",
+      "args": [
+        "### Work type\r\n\r\nImplementation\r\n\r\n### Objective\r\n\r\nImplement X\r\n\r\n### Scope\r\n\r\n#### Constraints\r\n\r\n- X only\r\n\r\n#### Actions\r\n\r\n- Implement X\r\n\r\n### Acceptance criteria\r\n\r\n- X passes"
+      ],
+      "assert": {
+        "op": "true"
+      }
+    },
+    {
+      "name": "empty_or_missing_1",
+      "function": "validate",
+      "args": [
+        null
+      ],
+      "assert": {
+        "op": "false"
+      }
+    },
+    {
+      "name": "empty_or_missing_2",
+      "function": "validate",
+      "args": [
+        ""
+      ],
+      "assert": {
+        "op": "false"
+      }
+    },
+    {
+      "name": "empty_or_missing_3",
+      "function": "validate",
+      "args": [
+        "free text"
+      ],
+      "assert": {
+        "op": "false"
+      }
+    },
+    {
+      "name": "empty_or_missing_4",
+      "function": "validate",
+      "args": [
+        "### Work type\n\nImplementation\n\n### Objective\n\nImplement X\n\n### Scope\n\n#### Constraints\n\n- \n\n#### Actions\n\n- Implement X\n\n### Acceptance criteria\n\n- X passes"
+      ],
+      "assert": {
+        "op": "false"
+      }
+    },
+    {
+      "name": "empty_or_missing_5",
+      "function": "validate",
+      "args": [
+        "### Work type\n\nImplementation\n\n### Objective\n\nImplement X\n\n### Other\n\n#### Constraints\n\n- X only\n\n#### Actions\n\n- Implement X\n\n### Acceptance criteria\n\n- X passes"
+      ],
+      "assert": {
+        "op": "false"
+      }
+    },
+    {
+      "name": "empty_or_missing_6",
+      "function": "validate",
+      "args": [
+        "### Objective\n\nImplement X\n\n### Scope\n\n#### Constraints\n\n- X only\n\n#### Actions\n\n- Implement X\n\n### Acceptance criteria\n\n- X passes"
+      ],
+      "assert": {
+        "op": "false"
+      }
+    },
+    {
+      "name": "empty_or_missing_7",
+      "function": "validate",
+      "args": [
+        "### Work type\n\nImplementation\n\n### Objective\n\nImplement X\n\n### Scope\n\nX only\n\n### Acceptance criteria\n\n- X passes"
+      ],
+      "assert": {
+        "op": "false"
+      }
+    },
+    {
+      "name": "placeholders_constraints_1",
+      "function": "validate",
+      "args": [
+        "### Work type\n\nImplementation\n\n### Objective\n\nImplement X\n\n### Scope\n\n#### Constraints\n\n- _No response_\n\n#### Actions\n\n- Implement X\n\n### Acceptance criteria\n\n- X passes"
+      ],
+      "assert": {
+        "op": "false"
+      }
+    },
+    {
+      "name": "placeholders_actions_1",
+      "function": "validate",
+      "args": [
+        "### Work type\n\nImplementation\n\n### Objective\n\nImplement X\n\n### Scope\n\n#### Constraints\n\n- X only\n\n#### Actions\n\n- _No response_\n\n### Acceptance criteria\n\n- X passes"
+      ],
+      "assert": {
+        "op": "false"
+      }
+    },
+    {
+      "name": "placeholders_constraints_2",
+      "function": "validate",
+      "args": [
+        "### Work type\n\nImplementation\n\n### Objective\n\nImplement X\n\n### Scope\n\n#### Constraints\n\n- TBD\n\n#### Actions\n\n- Implement X\n\n### Acceptance criteria\n\n- X passes"
+      ],
+      "assert": {
+        "op": "false"
+      }
+    },
+    {
+      "name": "placeholders_actions_2",
+      "function": "validate",
+      "args": [
+        "### Work type\n\nImplementation\n\n### Objective\n\nImplement X\n\n### Scope\n\n#### Constraints\n\n- X only\n\n#### Actions\n\n- TBD\n\n### Acceptance criteria\n\n- X passes"
+      ],
+      "assert": {
+        "op": "false"
+      }
+    },
+    {
+      "name": "placeholders_constraints_3",
+      "function": "validate",
+      "args": [
+        "### Work type\n\nImplementation\n\n### Objective\n\nImplement X\n\n### Scope\n\n#### Constraints\n\n- TODO\n\n#### Actions\n\n- Implement X\n\n### Acceptance criteria\n\n- X passes"
+      ],
+      "assert": {
+        "op": "false"
+      }
+    },
+    {
+      "name": "placeholders_actions_3",
+      "function": "validate",
+      "args": [
+        "### Work type\n\nImplementation\n\n### Objective\n\nImplement X\n\n### Scope\n\n#### Constraints\n\n- X only\n\n#### Actions\n\n- TODO\n\n### Acceptance criteria\n\n- X passes"
+      ],
+      "assert": {
+        "op": "false"
+      }
+    },
+    {
+      "name": "placeholders_constraints_4",
+      "function": "validate",
+      "args": [
+        "### Work type\n\nImplementation\n\n### Objective\n\nImplement X\n\n### Scope\n\n#### Constraints\n\n- N/A\n\n#### Actions\n\n- Implement X\n\n### Acceptance criteria\n\n- X passes"
+      ],
+      "assert": {
+        "op": "false"
+      }
+    },
+    {
+      "name": "placeholders_actions_4",
+      "function": "validate",
+      "args": [
+        "### Work type\n\nImplementation\n\n### Objective\n\nImplement X\n\n### Scope\n\n#### Constraints\n\n- X only\n\n#### Actions\n\n- N/A\n\n### Acceptance criteria\n\n- X passes"
+      ],
+      "assert": {
+        "op": "false"
+      }
+    },
+    {
+      "name": "placeholders_constraints_5",
+      "function": "validate",
+      "args": [
+        "### Work type\n\nImplementation\n\n### Objective\n\nImplement X\n\n### Scope\n\n#### Constraints\n\n- <!-- instructions -->\n\n#### Actions\n\n- Implement X\n\n### Acceptance criteria\n\n- X passes"
+      ],
+      "assert": {
+        "op": "false"
+      }
+    },
+    {
+      "name": "placeholders_actions_5",
+      "function": "validate",
+      "args": [
+        "### Work type\n\nImplementation\n\n### Objective\n\nImplement X\n\n### Scope\n\n#### Constraints\n\n- X only\n\n#### Actions\n\n- <!-- instructions -->\n\n### Acceptance criteria\n\n- X passes"
+      ],
+      "assert": {
+        "op": "false"
+      }
+    },
+    {
+      "name": "placeholders_constraints_6",
+      "function": "validate",
+      "args": [
+        "### Work type\n\nImplementation\n\n### Objective\n\nImplement X\n\n### Scope\n\n#### Constraints\n\n-    \n\n#### Actions\n\n- Implement X\n\n### Acceptance criteria\n\n- X passes"
+      ],
+      "assert": {
+        "op": "false"
+      }
+    },
+    {
+      "name": "placeholders_actions_6",
+      "function": "validate",
+      "args": [
+        "### Work type\n\nImplementation\n\n### Objective\n\nImplement X\n\n### Scope\n\n#### Constraints\n\n- X only\n\n#### Actions\n\n-    \n\n### Acceptance criteria\n\n- X passes"
+      ],
+      "assert": {
+        "op": "false"
+      }
+    },
+    {
+      "name": "placeholders_constraints_7",
+      "function": "validate",
+      "args": [
+        "### Work type\n\nImplementation\n\n### Objective\n\nImplement X\n\n### Scope\n\n#### Constraints\n\n- [ ]\n\n#### Actions\n\n- Implement X\n\n### Acceptance criteria\n\n- X passes"
+      ],
+      "assert": {
+        "op": "false"
+      }
+    },
+    {
+      "name": "placeholders_actions_7",
+      "function": "validate",
+      "args": [
+        "### Work type\n\nImplementation\n\n### Objective\n\nImplement X\n\n### Scope\n\n#### Constraints\n\n- X only\n\n#### Actions\n\n- [ ]\n\n### Acceptance criteria\n\n- X passes"
+      ],
+      "assert": {
+        "op": "false"
+      }
+    },
+    {
+      "name": "duplicate_or_reordered_1",
+      "function": "validate",
+      "args": [
+        "### Work type\n\nImplementation\n\n### Objective\n\nImplement X\n\n### Scope\n\n#### Constraints\n\n- X only\n\n#### Actions\n\n- Implement X\n\n### Acceptance criteria\n\n- X passes\n### Scope\nmore"
+      ],
+      "assert": {
+        "op": "false"
+      }
+    },
+    {
+      "name": "duplicate_or_reordered_2",
+      "function": "validate",
+      "args": [
+        "### Work type\n\nImplementation\n\n### Scope\n\nImplement X\n\n### Scope\n\n#### Constraints\n\n- X only\n\n#### Actions\n\n- Implement X\n\n### Acceptance criteria\n\n- X passes"
+      ],
+      "assert": {
+        "op": "false"
+      }
+    },
+    {
+      "name": "work_type_implementation_valid",
+      "function": "validate",
+      "args": [
+        "### Work type\n\nImplementation\n\n### Objective\n\nImplement X\n\n### Scope\n\n#### Constraints\n\n- X only\n\n#### Actions\n\n- Implement X\n\n### Acceptance criteria\n\n- X passes"
+      ],
+      "assert": {
+        "op": "true"
+      }
+    },
+    {
+      "name": "work_type_implementation_value",
+      "function": "work_type",
+      "args": [
+        "### Work type\n\nImplementation\n\n### Objective\n\nImplement X\n\n### Scope\n\n#### Constraints\n\n- X only\n\n#### Actions\n\n- Implement X\n\n### Acceptance criteria\n\n- X passes"
+      ],
+      "assert": {
+        "op": "equal",
+        "value": "Implementation"
+      }
+    },
+    {
+      "name": "work_type_read_only_valid",
+      "function": "validate",
+      "args": [
+        "### Work type\n\nRead-only\n\n### Objective\n\nImplement X\n\n### Scope\n\n#### Constraints\n\n- X only\n\n#### Actions\n\n- Implement X\n\n### Acceptance criteria\n\n- X passes"
+      ],
+      "assert": {
+        "op": "true"
+      }
+    },
+    {
+      "name": "work_type_read_only_value",
+      "function": "work_type",
+      "args": [
+        "### Work type\n\nRead-only\n\n### Objective\n\nImplement X\n\n### Scope\n\n#### Constraints\n\n- X only\n\n#### Actions\n\n- Implement X\n\n### Acceptance criteria\n\n- X passes"
+      ],
+      "assert": {
+        "op": "equal",
+        "value": "Read-only"
+      }
+    },
+    {
+      "name": "work_type_missing",
+      "function": "work_type",
+      "args": [
+        "### Objective\n\nImplement X\n\n### Scope\n\n#### Constraints\n\n- X only\n\n#### Actions\n\n- Implement X\n\n### Acceptance criteria\n\n- X passes"
+      ],
+      "assert": {
+        "op": "equal",
+        "value": null
+      }
+    },
+    {
+      "name": "work_type_unknown",
+      "function": "validate",
+      "args": [
+        "### Work type\n\nUnknown\n\n### Objective\n\nImplement X\n\n### Scope\n\n#### Constraints\n\n- X only\n\n#### Actions\n\n- Implement X\n\n### Acceptance criteria\n\n- X passes"
+      ],
+      "assert": {
+        "op": "false"
+      }
+    },
+    {
+      "name": "malformed_scope_1",
+      "function": "validate",
+      "args": [
+        "### Work type\n\nImplementation\n\n### Objective\n\nImplement X\n\n### Scope\n\n#### Constraints\n\n- X only\n\n### Acceptance criteria\n\n- X passes"
+      ],
+      "assert": {
+        "op": "false"
+      }
+    },
+    {
+      "name": "malformed_scope_2",
+      "function": "validate",
+      "args": [
+        "### Work type\n\nImplementation\n\n### Objective\n\nImplement X\n\n### Scope\n\n#### Actions\n\n- Implement X\n\n### Acceptance criteria\n\n- X passes"
+      ],
+      "assert": {
+        "op": "false"
+      }
+    },
+    {
+      "name": "malformed_scope_3",
+      "function": "validate",
+      "args": [
+        "### Work type\n\nImplementation\n\n### Objective\n\nImplement X\n\n### Scope\n\n#### Actions\n\n- Implement X\n\n#### Constraints\n\n- X only\n\n### Acceptance criteria\n\n- X passes"
+      ],
+      "assert": {
+        "op": "false"
+      }
+    },
+    {
+      "name": "malformed_scope_4",
+      "function": "validate",
+      "args": [
+        "### Work type\n\nImplementation\n\n### Objective\n\nImplement X\n\n### Scope\n\n#### Constraints\n\n- X only\n\n#### Constraints\n\n- X only\n\n#### Actions\n\n- Implement X\n\n### Acceptance criteria\n\n- X passes"
+      ],
+      "assert": {
+        "op": "false"
+      }
+    },
+    {
+      "name": "malformed_scope_5",
+      "function": "validate",
+      "args": [
+        "### Work type\n\nImplementation\n\n### Objective\n\nImplement X\n\n### Scope\n\n#### Constraints\n\n- X only\n\n#### Actions\n\n- Implement X\n\n#### Extra\n\n- X\n\n### Acceptance criteria\n\n- X passes"
+      ],
+      "assert": {
+        "op": "false"
+      }
+    },
+    {
+      "name": "malformed_scope_6",
+      "function": "validate",
+      "args": [
+        "### Work type\n\nImplementation\n\n### Objective\n\nImplement X\n\n### Scope\n\nUnexpected scope text\n\n#### Constraints\n\n- X only\n\n#### Actions\n\n- Implement X\n\n### Acceptance criteria\n\n- X passes"
+      ],
+      "assert": {
+        "op": "false"
+      }
+    },
+    {
+      "name": "malformed_scope_7",
+      "function": "validate",
+      "args": [
+        "### Work type\n\nImplementation\n\n### Objective\n\nImplement X\n\n### Scope\n\n#### Constraints\n\n- X only\n\n##### Actions\n\n- Implement X\n\n### Acceptance criteria\n\n- X passes"
+      ],
+      "assert": {
+        "op": "false"
+      }
+    }
+  ]
+}

@@ -254,8 +254,16 @@ def main(argv=None):
         tests = argparse.ArgumentParser(prog="test")
         tests.add_argument("module", nargs="?", choices=[*MODULES, "all"], default="all")
         selection = tests.parse_args(rest).module
-        modules = MODULES.values() if selection == "all" else [MODULES[selection]]
-        suite = unittest.TestSuite(unittest.defaultTestLoader.loadTestsFromModule(m) for m in modules)
+        from tests import runner
+        names = list(MODULES) if selection == "all" else [selection]
+        suite = unittest.TestSuite()
+        for name in names:
+            if name in runner.FILES:
+                suite.addTests(runner.load_suite(name))
+            else:
+                suite.addTests(unittest.defaultTestLoader.loadTestsFromModule(MODULES[name]))
+        if selection in ("all", "issue"):
+            suite.addTests(runner.self_suite())
         return int(not unittest.TextTestRunner(verbosity=2).run(suite).wasSuccessful())
     return COMMANDS[args.command](rest) or 0
 

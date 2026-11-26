@@ -1,6 +1,5 @@
 """Canonical structural Work contract. No legacy format fallback."""
 import re
-import unittest
 from .model import ISSUE_HEADING, PLACEHOLDERS, normalize, sections, without_comments
 
 FIELDS = ("Work type", "Objective", "Scope", "Acceptance criteria")
@@ -45,50 +44,3 @@ def validate(body):
         if name == "Scope" and not scope_valid(value):
             return False
     return True
-
-
-class ContractTests(unittest.TestCase):
-    scope = "#### Constraints\n\n- X only\n\n#### Actions\n\n- Implement X"
-    good = ("### Work type\n\nImplementation\n\n### Objective\n\nImplement X\n\n### Scope\n\n"
-            + scope + "\n\n### Acceptance criteria\n\n- X passes")
-
-    def test_valid(self):
-        self.assertTrue(validate(self.good))
-        self.assertTrue(validate(self.good.replace("\n", "\r\n")))
-
-    def test_empty_or_missing(self):
-        for body in (None, "", "free text", self.good.replace("X only", ""),
-                     self.good.replace("### Scope", "### Other"),
-                     self.good.replace("### Work type\n\nImplementation\n\n", ""),
-                     self.good.replace(self.scope, "X only")):
-            self.assertFalse(validate(body))
-
-    def test_placeholders(self):
-        for placeholder in ("_No response_", "TBD", "TODO", "N/A", "<!-- instructions -->", "   ", "[ ]"):
-            self.assertFalse(validate(self.good.replace("X only", placeholder)))
-            self.assertFalse(validate(self.good.replace("- Implement X", "- " + placeholder)))
-
-    def test_duplicate_or_reordered(self):
-        self.assertFalse(validate(self.good + "\n### Scope\nmore"))
-        self.assertFalse(validate(self.good.replace("### Objective", "### Scope", 1)))
-
-    def test_work_type(self):
-        for kind in TYPES:
-            body = self.good.replace("Implementation", kind, 1)
-            self.assertTrue(validate(body))
-            self.assertEqual(work_type(body), kind)
-        self.assertIsNone(work_type(self.good.replace("### Work type\n\nImplementation\n\n", "")))
-        self.assertFalse(validate(self.good.replace("Implementation", "Unknown", 1)))
-
-    def test_malformed_scope(self):
-        for scope in (
-            "#### Constraints\n\n- X only",
-            "#### Actions\n\n- Implement X",
-            "#### Actions\n\n- Implement X\n\n#### Constraints\n\n- X only",
-            "#### Constraints\n\n- X only\n\n#### Constraints\n\n- X only\n\n#### Actions\n\n- Implement X",
-            "#### Constraints\n\n- X only\n\n#### Actions\n\n- Implement X\n\n#### Extra\n\n- X",
-            "Unexpected scope text\n\n" + self.scope,
-            self.scope.replace("#### Actions", "##### Actions"),
-        ):
-            with self.subTest(scope=scope):
-                self.assertFalse(validate(self.good.replace(self.scope, scope)))

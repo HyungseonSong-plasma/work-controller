@@ -1,0 +1,354 @@
+{
+  "version": 1,
+  "target": "validation.pr",
+  "cases": [
+    {
+      "name": "valid_1",
+      "function": "errors",
+      "args": [
+        "### Work\n\nRefs #12\n\n### Changes\n\nAdd X\n\n### Verification\n\nTests passed"
+      ],
+      "assert": {
+        "op": "equal",
+        "value": []
+      }
+    },
+    {
+      "name": "valid_2",
+      "function": "errors",
+      "args": [
+        "### Work\r\n\r\nRefs #12\r\n\r\n### Changes\r\n\r\nAdd X\r\n\r\n### Verification\r\n\r\nTests passed"
+      ],
+      "assert": {
+        "op": "equal",
+        "value": []
+      }
+    },
+    {
+      "name": "empty_or_missing_1",
+      "function": "errors",
+      "args": [
+        null
+      ],
+      "assert": {
+        "op": "true"
+      }
+    },
+    {
+      "name": "empty_or_missing_2",
+      "function": "errors",
+      "args": [
+        ""
+      ],
+      "assert": {
+        "op": "true"
+      }
+    },
+    {
+      "name": "empty_or_missing_3",
+      "function": "errors",
+      "args": [
+        "free text"
+      ],
+      "assert": {
+        "op": "true"
+      }
+    },
+    {
+      "name": "empty_or_missing_4",
+      "function": "errors",
+      "args": [
+        "### Work\n\nRefs #12\n\n### Changes\n\n\n\n### Verification\n\nTests passed"
+      ],
+      "assert": {
+        "op": "true"
+      }
+    },
+    {
+      "name": "empty_or_missing_5",
+      "function": "errors",
+      "args": [
+        "### Work\n\nRefs #12\n\n### Other\n\nAdd X\n\n### Verification\n\nTests passed"
+      ],
+      "assert": {
+        "op": "true"
+      }
+    },
+    {
+      "name": "work_reference_1",
+      "function": "errors",
+      "args": [
+        "### Work\n\nRefs #\n\n### Changes\n\nAdd X\n\n### Verification\n\nTests passed"
+      ],
+      "assert": {
+        "op": "true"
+      }
+    },
+    {
+      "name": "work_reference_2",
+      "function": "errors",
+      "args": [
+        "### Work\n\nRefs #0\n\n### Changes\n\nAdd X\n\n### Verification\n\nTests passed"
+      ],
+      "assert": {
+        "op": "true"
+      }
+    },
+    {
+      "name": "work_reference_3",
+      "function": "errors",
+      "args": [
+        "### Work\n\nRefs #1 #2\n\n### Changes\n\nAdd X\n\n### Verification\n\nTests passed"
+      ],
+      "assert": {
+        "op": "true"
+      }
+    },
+    {
+      "name": "work_reference_4",
+      "function": "errors",
+      "args": [
+        "### Work\n\nCloses #12\n\n### Changes\n\nAdd X\n\n### Verification\n\nTests passed"
+      ],
+      "assert": {
+        "op": "true"
+      }
+    },
+    {
+      "name": "work_reference_5",
+      "function": "errors",
+      "args": [
+        "### Work\n\nRefs other/repo#12\n\n### Changes\n\nAdd X\n\n### Verification\n\nTests passed"
+      ],
+      "assert": {
+        "op": "true"
+      }
+    },
+    {
+      "name": "placeholders_1",
+      "function": "errors",
+      "args": [
+        "### Work\n\nRefs #12\n\n### Changes\n\nAdd X\n\n### Verification\n\nTBD"
+      ],
+      "assert": {
+        "op": "true"
+      }
+    },
+    {
+      "name": "placeholders_2",
+      "function": "errors",
+      "args": [
+        "### Work\n\nRefs #12\n\n### Changes\n\nAdd X\n\n### Verification\n\n<!-- instructions -->"
+      ],
+      "assert": {
+        "op": "true"
+      }
+    },
+    {
+      "name": "placeholders_3",
+      "function": "errors",
+      "args": [
+        "### Work\n\nRefs #12\n\n### Changes\n\nAdd X\n\n### Verification\n\n   "
+      ],
+      "assert": {
+        "op": "true"
+      }
+    },
+    {
+      "name": "duplicate_or_reordered_1",
+      "function": "errors",
+      "args": [
+        "### Work\n\nRefs #12\n\n### Changes\n\nAdd X\n\n### Verification\n\nTests passed\n### Work\nRefs #13"
+      ],
+      "assert": {
+        "op": "true"
+      }
+    },
+    {
+      "name": "duplicate_or_reordered_2",
+      "function": "errors",
+      "args": [
+        "### Changes\n\nRefs #12\n\n### Changes\n\nAdd X\n\n### Verification\n\nTests passed"
+      ],
+      "assert": {
+        "op": "true"
+      }
+    },
+    {
+      "name": "work_number_valid_1",
+      "function": "work_number",
+      "args": [
+        "### Work\n\nRefs #12\n\n### Changes\n\nAdd X\n\n### Verification\n\nTests passed"
+      ],
+      "assert": {
+        "op": "equal",
+        "value": 12
+      }
+    },
+    {
+      "name": "work_number_valid_2",
+      "function": "work_number",
+      "args": [
+        "### Work\n\n<!-- ignored -->Refs #12\n\n### Changes\n\nAdd X\n\n### Verification\n\nTests passed"
+      ],
+      "assert": {
+        "op": "equal",
+        "value": 12
+      }
+    },
+    {
+      "name": "work_number_invalid_1",
+      "function": "work_number",
+      "args": [
+        ""
+      ],
+      "assert": {
+        "op": "raises",
+        "exception": "ValueError"
+      }
+    },
+    {
+      "name": "work_number_invalid_2",
+      "function": "work_number",
+      "args": [
+        "### Work\n\nRefs #12, #13\n\n### Changes\n\nAdd X\n\n### Verification\n\nTests passed"
+      ],
+      "assert": {
+        "op": "raises",
+        "exception": "ValueError"
+      }
+    },
+    {
+      "name": "work_target_valid",
+      "function": "work_errors",
+      "args": [
+        12,
+        {
+          "number": 12,
+          "state": "open",
+          "body": "### Work type\n\nImplementation\n\n### Objective\n\nX\n\n### Scope\n\n#### Constraints\n\n- X only\n\n#### Actions\n\n- Implement X\n\n### Acceptance criteria\n\nX passes"
+        }
+      ],
+      "assert": {
+        "op": "equal",
+        "value": []
+      }
+    },
+    {
+      "name": "work_target_invalid_1",
+      "function": "work_errors",
+      "args": [
+        12,
+        null
+      ],
+      "assert": {
+        "op": "true"
+      }
+    },
+    {
+      "name": "work_target_invalid_2",
+      "function": "work_errors",
+      "args": [
+        12,
+        {}
+      ],
+      "assert": {
+        "op": "true"
+      }
+    },
+    {
+      "name": "work_target_invalid_3",
+      "function": "work_errors",
+      "args": [
+        12,
+        {
+          "number": 13,
+          "state": "open",
+          "body": "### Work type\n\nImplementation\n\n### Objective\n\nX\n\n### Scope\n\n#### Constraints\n\n- X only\n\n#### Actions\n\n- Implement X\n\n### Acceptance criteria\n\nX passes"
+        }
+      ],
+      "assert": {
+        "op": "true"
+      }
+    },
+    {
+      "name": "work_target_invalid_4",
+      "function": "work_errors",
+      "args": [
+        12,
+        {
+          "number": 12,
+          "state": "closed",
+          "body": "### Work type\n\nImplementation\n\n### Objective\n\nX\n\n### Scope\n\n#### Constraints\n\n- X only\n\n#### Actions\n\n- Implement X\n\n### Acceptance criteria\n\nX passes"
+        }
+      ],
+      "assert": {
+        "op": "true"
+      }
+    },
+    {
+      "name": "work_target_invalid_5",
+      "function": "work_errors",
+      "args": [
+        12,
+        {
+          "number": 12,
+          "state": "open",
+          "body": "### Work type\n\nImplementation\n\n### Objective\n\nX\n\n### Scope\n\n#### Constraints\n\n- X only\n\n#### Actions\n\n- Implement X\n\n### Acceptance criteria\n\nX passes",
+          "pull_request": {}
+        }
+      ],
+      "assert": {
+        "op": "true"
+      }
+    },
+    {
+      "name": "work_target_invalid_6",
+      "function": "work_errors",
+      "args": [
+        12,
+        {
+          "number": 12,
+          "state": "open",
+          "body": ""
+        }
+      ],
+      "assert": {
+        "op": "true"
+      }
+    },
+    {
+      "name": "work_target_invalid_7",
+      "function": "work_errors",
+      "args": [
+        12,
+        {
+          "number": 12,
+          "state": "open",
+          "body": null
+        }
+      ],
+      "assert": {
+        "op": "true"
+      }
+    },
+    {
+      "name": "read_only_target",
+      "function": "work_errors",
+      "args": [
+        12,
+        {
+          "number": 12,
+          "state": "open",
+          "body": "### Work type\n\nRead-only\n\n### Objective\n\nX\n\n### Scope\n\n#### Constraints\n\n- X only\n\n#### Actions\n\n- Implement X\n\n### Acceptance criteria\n\nReport"
+        }
+      ],
+      "assert": {
+        "op": "equal",
+        "value": [
+          "Read-only Work must not have a PR"
+        ]
+      }
+    }
+  ]
+}
