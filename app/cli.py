@@ -42,6 +42,7 @@ def merge_command(argv):
     parser.add_argument("--pr", required=True, type=int)
     parser.add_argument("--approved-snapshot", help="Digest of metadata and code revision reviewed for scope and evidence")
     parser.add_argument("--expected-head")
+    parser.add_argument("--approved-change", help="B-grade scope digest, only after explicit user approval")
     parser.add_argument("--merge", action="store_true", help="Explicitly request a squash merge after verification")
     args = parser.parse_args(argv)
     if not REPO.fullmatch(args.repo) or args.pr < 1:
@@ -56,7 +57,7 @@ def merge_command(argv):
         parser.error("Verification requires --expected-head")
     data = verify(args.repo, args.pr, args.approved_snapshot, args.expected_head)
     if args.merge:
-        permission = authority.inspect_pr(args.repo, args.pr, data["head"], data["base"])
+        permission = authority.inspect_pr(args.repo, args.pr, data["head"], data["base"], args.approved_change)
         if not permission["allowed"]:
             raise ValueError(permission["reason"])
         data = verify(args.repo, args.pr, args.approved_snapshot, args.expected_head)
@@ -118,11 +119,17 @@ def authority_command(argv):
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--pr", type=int)
     mode.add_argument("--path", nargs="+")
+    parser.add_argument("--work", type=int, help="Work number for planned path assessment")
+    parser.add_argument("--approved-change", help="B-grade scope digest, only after explicit user approval")
     args = parser.parse_args(argv)
     if not REPO.fullmatch(args.repo) or (args.pr is not None and args.pr < 1):
         parser.error("Expected owner/repo and positive PR number")
-    result = (authority.inspect_pr(args.repo, args.pr) if args.pr is not None
-              else authority.plan_paths(args.repo, args.path))
+    if args.path is not None and (args.work is None or args.work < 1 or args.approved_change):
+        parser.error("Path planning requires --work; approval is supplied only for PR checks")
+    if args.pr is not None and args.work is not None:
+        parser.error("PR inspection derives the Work from its body")
+    result = (authority.inspect_pr(args.repo, args.pr, approved_change=args.approved_change) if args.pr is not None
+              else authority.plan_paths(args.repo, args.work, args.path))
     print(json.dumps(result, indent=2, ensure_ascii=False))
     return int(not result["allowed"]) if args.pr is not None else 0
 
