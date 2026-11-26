@@ -45,7 +45,9 @@ def pr_action(repo, pr, issue, check_reader, detail_reader):
     fresh = detail_reader(repo, number)
     if (fresh.get("body") != pr.get("body") or fresh.get("state") != "open" or
             fresh.get("head", {}).get("sha") != pr["head"]["sha"] or fresh.get("draft") or
-            fresh.get("base") != pr.get("base")):
+            any(fresh.get("base", {}).get(k) != pr.get("base", {}).get(k)
+                for k in ("ref", "sha")) or
+            fresh["base"]["repo"]["full_name"].casefold() != pr["base"]["repo"]["full_name"].casefold()):
         return {"pr": number, "action": "REFRESH_STATE"}
     data = snapshot(fresh, issue, repo, number)
     checks = check_reader(repo, number)
