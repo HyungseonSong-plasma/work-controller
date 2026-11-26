@@ -51,3 +51,22 @@ python3 validation/validate_completion.py --repo OWNER/REPO --work NUMBER --appr
 Add `--close --evidence "review evidence or links"` only after explicit acceptance review and authorization. The script records the digest and evidence in an Issue comment, rechecks the snapshot, then closes as completed. The digest is not proof of reviewer identity or semantic completion. Tests: `python3 validation/validate_completion.py --test`.
 
 The Issue workflow also checks completed closures after the event and reopens structural violations with a reason. Not-planned and duplicate closures are unaffected. Direct UI completion is a manual acceptance decision, not a required digest attestation. The guard is asynchronous, cannot guarantee atomic closure, may fail on API/runner errors, and is not continuously triggered by later PR/Issue changes. Controller must revalidate before closure; semantic acceptance remains manual.
+
+## Controller discovery
+
+Run from trusted main with authenticated GitHub CLI:
+
+```sh
+python3 controller.py --repo OWNER/REPO
+python3 controller.py --test
+```
+
+The Controller reads every page of open Issues and PRs, excludes PRs from the Work list, and uses existing validators for membership and completion. It emits JSON with one or more recommended actions per Work and unassigned open PRs. It does not write, delegate, merge, or close.
+
+- `PLAN_WORK`: no delivered or active Work Unit; plan or replan from the Issue.
+- `FIX_WORK_CONTRACT`, `FIX_WORK_REFERENCE`, `FIX_PR_CONTRACT`, `FIX_PR_TARGET`: repair structural problems.
+- `CONTINUE_DRAFT`, `FIX_CI`, `WAIT_CI`, `UPDATE_BRANCH`, `WAIT_MERGE_GATE`, `REFRESH_STATE`: resolve or refresh PR state.
+- `REVIEW_MERGE`: inspect scope and evidence, then use the existing merge preflight if authorized.
+- `REVIEW_COMPLETION`, `REVIEW_COMPLETION_BLOCKERS`: inspect acceptance criteria or resolve completion blockers.
+
+Review digests are suggestions bound to the observed snapshot, not approvals. The controller does not infer semantic completion, and live data can change during discovery. Re-run the relevant preflight immediately before a write. Read-only/non-code Work completion and A/B/C file modification authority require separate policy approval; this version does not change those contracts. API errors fail the run rather than producing a potentially incomplete execution plan.
