@@ -85,11 +85,19 @@ def manual_identity(repo, event, sha, actor, run, attempt):
     return {"run": run, "attempt": attempt, "base": sha, "actor": actor}
 
 
-def execute(repo, identity, inputs):
-    if set(inputs) != {"action", "work", "pr", "snapshot", "head", "evidence"}:
-        raise ValueError("Unexpected manual dispatch inputs")
+def normalize_dispatch_inputs(inputs):
+    """Accept omitted optional workflow inputs without weakening required fields."""
+    required = {"action", "work", "snapshot"}
+    optional = {"pr", "head", "evidence"}
+    if not isinstance(inputs, dict) or not required <= inputs.keys() or inputs.keys() - (required | optional):
+        raise ValueError("Unexpected manual dispatch inputs: require action, work, snapshot; optional pr, head, evidence")
     if any(not isinstance(v, str) for v in inputs.values()):
         raise ValueError("Dispatch inputs must be strings")
+    return {**dict.fromkeys(optional, ""), **inputs}
+
+
+def execute(repo, identity, inputs):
+    inputs = normalize_dispatch_inputs(inputs)
     work = number(inputs["work"])
     approved = inputs["snapshot"]
     if not DIGEST.fullmatch(approved):
