@@ -1,16 +1,23 @@
 name: Controller run
 on:
   workflow_dispatch:
+  issue_comment:
+    types: [created]
 
 permissions: {}
 
-concurrency:
-  group: controller-run
-  cancel-in-progress: false
-
 jobs:
   operation:
-    if: github.ref == 'refs/heads/main'
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'workflow_dispatch' ||
+       (github.event_name == 'issue_comment' &&
+        !github.event.issue.pull_request &&
+        github.event.issue.state == 'open' &&
+        github.event.comment.body == '/controller run'))
+    concurrency:
+      group: controller-run
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -19,6 +26,7 @@ jobs:
       pull-requests: read
       checks: read
       statuses: read
+      actions: read
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
@@ -27,4 +35,9 @@ jobs:
       - name: Run read-only Controller operation
         env:
           GH_TOKEN: ${{ github.token }}
-        run: python3 -m app.cli operation --repo "$GITHUB_REPOSITORY" --summary
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" == issue_comment ]]; then
+            python3 -m app.cli operation --repo "$GITHUB_REPOSITORY" --comment-request --summary
+          else
+            python3 -m app.cli operation --repo "$GITHUB_REPOSITORY" --summary
+          fi
