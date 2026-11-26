@@ -207,3 +207,32 @@ The trusted-main workflow listens only to created issue comments; non-command co
 Find Controller run workflow runs with event `issue_comment`, then inspect the operation job JSON or summary. Match the `request` fields (Work, comment ID, run ID, attempt and base SHA) to the submitted comment, and require a successful job with REPORTED and execution null before using its discovery. The report still covers all Works; the Agent processes only its own Work. Do not use historical or unmatched results. Non-command events may appear as skipped workflow runs.
 
 Owner login does not distinguish a human from the Agent using the same account. This is not a write authorization or an Executor interface. A queued run can fail if main advances, a request is changed or an Issue closes; a concurrent update after rechecking remains possible. GitHub concurrency serializes running jobs but can replace pending jobs, and reruns can repeat a read-only request. No exactly-once delivery, persisted request registry or automatic retry is provided. Inspect missing or failed runs rather than blindly reposting.
+
+## JSON-driven contract tests (schema v1)
+
+Issue and PR structural tests live in `tests/cases/issue.json` and `tests/cases/pr.json`. Each case is registered as a separate unittest method in list order by the shared wrapper. Add a case without editing Python when it uses an existing target and assertion:
+
+```json
+{
+  "version": 1,
+  "target": "validation.issue",
+  "cases": [
+    {
+      "name": "empty_body",
+      "function": "validate",
+      "args": [""],
+      "assert": {"op": "false"}
+    }
+  ]
+}
+```
+
+Each case requires name, function, args, assert; kwargs is optional. Assertions are exactly one of equal (value), true, false or raises (exception: ValueError). True/false retain unittest truthiness semantics. Only the explicit pure-function allowlist is callable; no arbitrary import, expression, mock, command, or network/write operations in this schema. Unknown fields, duplicate keys/names, empty suites, invalid inputs to the schema and unknown targets fail before execution. Individual assertion failures fail the CLI. The wrapper itself is tested by the issue and full suites.
+
+Migration mapping: Issue (38 individual assertions from six existing methods): valid 2, empty_or_missing 7, placeholders 14, duplicate_or_reordered 2, work_type 6, malformed_scope 7. PR (30 individual assertions from eight existing methods): valid 2, empty_or_missing 5, work_reference 5, placeholders 3, duplicate_or_reordered 2, work_number 4, work_target 8, read_only_target 1. Original truthiness, equality, None and exception assertions and literal input variations are preserved. Other validation and Controller unit tests remain in their existing modules; the write-capable Executor Live CI remains explicitly invoked and is never loaded by the JSON runner.
+
+```sh
+python3 -m app.cli test issue
+python3 -m app.cli test pr
+python3 -m app.cli test
+```
