@@ -5,15 +5,24 @@ import math
 from pathlib import Path
 import unittest
 
-from validation import issue, pr
+from validation import issue, pr, merge
+from .scenarios import approval as approval_scenarios, completion as completion_scenarios, merge as merge_scenarios
 from .model import TestClass
 
 TARGETS = {
     "validation.issue": {"validate": issue.validate, "work_type": issue.work_type},
     "validation.pr": {"errors": pr.errors, "work_number": pr.work_number,
                       "work_errors": pr.work_errors},
+    "validation.approval": {"evaluate_state": approval_scenarios.evaluate_state},
+    "validation.completion": {"assessment_blockers": completion_scenarios.assessment_blockers},
+    "validation.merge": {"snapshot": merge.snapshot},
 }
-FILES = {"issue": "validation.issue", "pr": "validation.pr"}
+FILES = {name: "validation." + name for name in ("issue", "pr", "approval", "completion", "merge")}
+SCENARIOS = {
+    "approval": approval_scenarios.ApprovalTests,
+    "completion": completion_scenarios.CompletionTests,
+    "merge": merge_scenarios.MergeTests,
+}
 EXCEPTIONS = {"ValueError": ValueError}
 CASE_DIR = Path(__file__).resolve().parent / "cases"
 
@@ -118,7 +127,13 @@ def suite_from_data(data, target, name):
 def load_suite(name):
     target = FILES[name]
     data = decode((CASE_DIR / (name + ".json")).read_text(encoding="utf-8"))
-    return suite_from_data(data, target, name)
+    suite = suite_from_data(data, target, name)
+    if name in SCENARIOS:
+        scenarios = unittest.defaultTestLoader.loadTestsFromTestCase(SCENARIOS[name])
+        if not scenarios.countTestCases():
+            raise ValueError(f"Empty Python scenario suite: {name}")
+        suite.addTests(scenarios)
+    return suite
 
 
 def self_suite():
@@ -212,3 +227,33 @@ class WrapperTests(unittest.TestCase):
             local.add("bad name")
         with self.assertRaises(ValueError):
             TestClass.add("shared")
+
+    def test_hybrid_selectors(self):
+        import contextlib
+        import io
+        from app.cli import main
+        for name, minimum in (("approval", 17), ("completion", 16), ("merge", 9)):
+            with self.subTest(name=name):
+                suite = load_suite(name)
+                tests = list(suite)
+                self.assertTrue(any(type(t).__module__ == "tests." + name for t in tests))
+                self.assertTrue(any(isinstance(t, unittest.TestSuite) and
+                                    any(type(m).__module__ == "tests.scenarios." + name for m in t)
+                                    for t in tests) or
+                                any(type(t).__module__ == "tests.scenarios." + name for t in tests))
+                self.assertGreaterEqual(suite.countTestCases(), minimum)
+                with contextlib.redirect_stderr(io.StringIO()) as output:
+                    self.assertEqual(main(["test", name]), 0, output.getvalue())
+                self.assertIn("Ran " + str(suite.countTestCases()) + " tests", output.getvalue())
+
+    def test_empty_scenario_rejected(self):
+        from unittest.mock import patch
+        with patch.dict(SCENARIOS, {"approval": unittest.TestCase}):
+            with self.assertRaises(ValueError):
+                load_suite("approval")
+
+    def test_hybrid_invalid_data_rejected(self):
+        from unittest.mock import patch
+        with patch("pathlib.Path.read_text", return_value='{"version":1,"target":"validation.merge","cases":[]}'):
+            with self.assertRaises(ValueError):
+                load_suite("merge")

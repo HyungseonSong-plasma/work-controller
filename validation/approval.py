@@ -3,8 +3,6 @@ import json
 import re
 import subprocess
 import time
-import unittest
-from unittest.mock import patch
 
 from . import authority
 from .model import api, pages, digest
@@ -191,53 +189,3 @@ def refresh_work(repo, work, trusted_base, target_url):
                 answer["publish_error"] = str(publish_error)
         output.append(dict(answer, pr=number))
     return output
-
-
-class ApprovalTests(unittest.TestCase):
-    repo = "owner/repo"
-    policy = {"owner": "owner", "A": [], "B": ["app/", "validation/"], "default": "C"}
-    issue = {"number": 3, "title": "Work", "state": "open",
-             "body": "### Work type\n\nImplementation\n\n### Objective\n\nX\n\n### Scope\n\n#### Constraints\n\n- X only\n\n#### Actions\n\n- Implement X\n\n### Acceptance criteria\n\nX passes"}
-    paths = ["app/cli.py"]
-
-    def fixture(self):
-        scope = authority.approval_scope(self.repo, 3, self.issue, self.policy,
-                                         authority.classify(self.policy, self.paths))
-        comment = {"id": 10, "created_at": "2026-01-01T00:00:02Z", "updated_at": "2026-01-01T00:00:02Z",
-                   "body": format_request(self.paths, scope)}
-        def event(i, label, kind="labeled", actor="owner"):
-            return {"id": i, "event": kind, "label": {"name": label}, "actor": {"login": actor},
-                    "created_at": f"2026-01-01T00:00:{i:02d}Z"}
-        return comment, [event(1, PENDING), event(3, PENDING, "unlabeled"), event(4, APPROVED)]
-
-    def state(self, current, comments, events, paths=None, **issue_changes):
-        issue = dict(self.issue, labels=[{"name": x} for x in current], **issue_changes)
-        return evaluate(self.repo, 3, issue, self.policy, comments, events, paths)["state"]
-
-    def test_approval_states(self):
-        c, events = self.fixture()
-        self.assertEqual(self.state([APPROVED], [c], events, self.paths), "APPROVED")
-        self.assertEqual(self.state([PENDING], [c], events[:1], self.paths), "PENDING")
-        self.assertEqual(self.state([REVOKED], [c], events), "REVOKED")
-        removed = dict(events[-1], id=5, event="unlabeled")
-        self.assertEqual(self.state([], [c], events+[removed]), "REVOKED")
-        self.assertEqual(self.state([], [], []), "NOT_REQUESTED")
-        self.assertEqual(self.state([], [], [], self.paths), "HUMAN_REVIEW")
-
-    def test_abnormal(self):
-        c, events = self.fixture()
-        for comments in ([], [dict(c, updated_at="later")], [c,c], [dict(c, body=HEADER+" bad")]):
-            self.assertEqual(self.state([APPROVED], comments, events, self.paths), "HUMAN_REVIEW")
-        self.assertEqual(self.state([APPROVED, PENDING], [c], events), "HUMAN_REVIEW")
-        self.assertEqual(self.state([APPROVED], [c], events, ["validation/pr.py"]), "HUMAN_REVIEW")
-        self.assertEqual(self.state([APPROVED], [c], events, self.paths, title="Changed"), "HUMAN_REVIEW")
-        self.assertEqual(self.state([APPROVED], [c], events[:-1]+[dict(events[-1], actor={"login":"other"})]), "HUMAN_REVIEW")
-        new_epoch = dict(events[0], id=5, created_at="2026-01-01T00:00:05Z")
-        self.assertEqual(self.state([APPROVED], [c], events+[new_epoch]), "HUMAN_REVIEW")
-        self.assertEqual(self.state([APPROVED], [c], events[:-1]+[dict(events[-1], created_at=c["created_at"])]), "HUMAN_REVIEW")
-
-    def test_c_only(self):
-        pr = {"state":"open", "head":{"sha":"b"*40}, "base":{"sha":"c"*40,"ref":"main"}, "body":""}
-        with patch(__name__+".api", return_value=pr), patch.object(authority,"inspect_pr",return_value=authority.classify(self.policy,["README.md"])), patch(__name__+".read_state") as read:
-            self.assertTrue(inspect_pr(self.repo, 1)["allowed"])
-            read.assert_not_called()

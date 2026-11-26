@@ -236,3 +236,15 @@ python3 -m app.cli test issue
 python3 -m app.cli test pr
 python3 -m app.cli test
 ```
+
+### Hybrid suites: JSON + Python scenarios
+
+Approval, Completion and Merge use the same schema v1 and static allowlist. The runner combines each JSON suite with its explicitly registered unittest class in `tests/scenarios/`. Mock targets, call sequencing, subprocess fixtures, digest comparisons and multi-assertion interactions stay in Python. JSON carries literal inputs and expected state or truthiness; the narrow adapters return the real evaluate state or assessment blockers without changing their meaning. Approval request fixtures contain an independently computed fixed scope digest for the original inputs. No new mock language or dynamically selected patch targets.
+
+| Original test group | JSON cases | Retained Python methods |
+|---|---:|---|
+| Approval: approval_states, abnormal, c_only | 6 + 10 | c_only (including no read_state call) |
+| Completion: valid_and_discarded, blockers, membership, approval_and_stale, guard, read_only_completion | 7 blockers + 4 read-only negatives | valid_and_discarded, membership (exact set equality), approval_and_stale, guard, read_only_completion (3 positive assertions and changed digest inequality) |
+| Merge: valid_snapshot, invalid_metadata, review_snapshot_changes, verify_rejects_stale_or_failed | 6 invalid metadata | valid_snapshot, review_snapshot_changes, verify_rejects_stale_or_failed |
+
+All original test variations are retained; complex Python tests keep original assertions and patch actual production module attributes. Authority and Controller tests remain in their original modules. Targeted commands: `python3 -m app.cli test approval`, `python3 -m app.cli test completion`, `python3 -m app.cli test merge`. Full CI also exercises these selectors through wrapper regression tests.
