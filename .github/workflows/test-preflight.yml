@@ -1,0 +1,44 @@
+name: Temporary preflight integration
+on:
+  pull_request:
+    types: [opened, edited]
+permissions:
+  contents: read
+  pull-requests: read
+  issues: read
+  checks: read
+jobs:
+  exercise:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
+      - name: Exercise live preflight without merge
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DRIVER_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          set -euo pipefail
+          args=(--repo "$GITHUB_REPOSITORY" --pr 23)
+          if [[ "$DRIVER_BODY" == *"NEGATIVE"* ]]; then
+            if python3 validation/validate_merge.py "${args[@]}" --approved-snapshot dummy --expected-head 6797b8e4f20ac2d3d7c2f021a5a0061321caad82 > "$RUNNER_TEMP/negative.log" 2>&1; then
+              echo "Unexpected pass"
+              exit 1
+            fi
+            cat "$RUNNER_TEMP/negative.log"
+            grep -F "Referenced Work must be OPEN" "$RUNNER_TEMP/negative.log"
+            gh pr checks 23 --repo "$GITHUB_REPOSITORY" --required --json name,state
+          else
+            for attempt in {1..12}; do
+              if [[ "$(gh api "repos/$GITHUB_REPOSITORY/pulls/23" --jq .mergeable_state)" == clean ]]; then
+                break
+              fi
+              sleep 5
+            done
+            python3 validation/validate_merge.py "${args[@]}" > "$RUNNER_TEMP/review.json"
+            digest=$(jq -r .review_digest "$RUNNER_TEMP/review.json")
+            head=$(jq -r .snapshot.head "$RUNNER_TEMP/review.json")
+            python3 validation/validate_merge.py "${args[@]}" --approved-snapshot "$digest" --expected-head "$head"
+          fi
