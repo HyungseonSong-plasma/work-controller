@@ -9,7 +9,8 @@
     ".github/",
     "validation/",
     "app/",
-    "controller/"
+    "controller/",
+    "tests/"
   ],
   "default": "C"
 }
