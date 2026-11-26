@@ -86,13 +86,13 @@ Owner-controlled policy lives in `.github/change-authority.json`. **The owner mu
 ```json
 {
   "owner": "HyungseonSong-plasma",
-  "A": [".github/change-authority.json", "validation/authority.py"],
+  "A": [".github/change-authority.json", "validation/authority.py", ".github/workflows/grade-a.yml"],
   "B": [".github/", "validation/", "app/", "controller/"],
   "default": "C"
 }
 ```
 
-Exact paths and directory prefixes ending in / are supported. Highest grade wins, including both sides of a rename. Policy and authority evaluator are always A. Promotion/demotion is owner-only.
+Exact paths and directory prefixes ending in / are supported. Highest grade wins, including both sides of a rename. Policy, authority evaluator and grade-a workflow are always A. Promotion/demotion is owner-only.
 
 - A: ChatGPT may propose changes, but the user modifies the files personally. Automated merge is denied.
 - B: ChatGPT must present the Work, intended change and affected B paths and obtain explicit user approval in conversation **before modifying files**. After approval, normal implementation and merge procedures apply, just as for C. No separate GitHub reviewer or agent account is required.
@@ -106,3 +106,11 @@ python3 -m app.cli authority --repo OWNER/REPO --pr NUMBER --approved-change DIG
 The path plan returns an approval digest for B. It binds repository, Work number/title/body, policy and the exact B path set. It is a scope identifier, **not proof of approval**; ChatGPT must not pass it as approved without a real user decision. If B paths, Work description, policy or the approved intent changes, request approval again. Unrelated C paths do not change the digest, but still must remain within Work scope.
 
 The unified `merge --merge` path requires the trusted-base policy and complete file enumeration. For B, supply `--approved-change DIGEST` only after actual user approval. A is denied; C needs no B approval. Existing merge preflight and explicit merge authorization still apply. Missing/invalid policy fails closed. Pre-write enforcement remains an operating rule until an executor integrates the gate; raw connector writes and native GitHub UI/API are not intercepted. The user retains direct manual merge authority. The CLI verifies scope consistency, not user identity or semantic consent. The owner must install the policy before automated merge. Test: `python3 -m app.cli test authority`.
+
+### GitHub A_rank ruleset
+
+The `grade-a` commit status is published by the trusted-base `pull_request_target` workflow. It checks actual changed paths, including previous paths of renames, against the base policy. A or unavailable policy/data fails; B and C pass this particular gate. The workflow never executes candidate code. The status is posted explicitly to the PR head SHA because the target workflow itself runs against the base.
+
+Bootstrap: leave A_rank Disabled, manually merge this bootstrap PR, personally create the policy file in another Work Unit PR, and manually merge that PR. After successful and failing disposable PR tests, require `grade-a` from GitHub Actions on main (strict up-to-date, no bypass), then activate A_rank. For future A edits, the owner temporarily disables A_rank, personally edits and merges, then restores it. Keep pr_merge_restriction active throughout.
+
+This blocks main merges, not feature branch edits. Commit status source pinning reduces spoofing by other integrations but does not establish an isolated security principal for all GitHub Actions workflows. Same-repository writers may modify other workflows to publish statuses, and trusted helper changes still require review. No claim of adversarial-proof access control is made.
