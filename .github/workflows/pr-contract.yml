@@ -20,6 +20,7 @@ jobs:
       - run: python3 validation/validate_issue.py --test
       - run: python3 validation/validate_merge.py --test
       - run: python3 validation/validate_completion.py --test
+      - run: python3 controller.py --test
   pr-template:
     name: pr-template
     needs: candidate-tests
