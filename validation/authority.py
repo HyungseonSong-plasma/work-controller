@@ -5,7 +5,8 @@ import re
 import unittest
 from unittest.mock import patch
 
-from .model import SHA, api, pages
+from .model import SHA, api, pages, digest
+from .pr import work_number, work_errors
 
 POLICY_PATH = ".github/change-authority.json"
 ROOT_A = (POLICY_PATH, "validation/authority.py")
@@ -76,24 +77,29 @@ def changed_paths(files, count):
     return paths
 
 
-def decision(policy, classification, pr, reviews):
+def approval_scope(repo, work, issue, policy, classification):
+    """Bind approval to the Work, policy, and exact set of B paths, not unrelated C changes."""
+    problems = work_errors(work, issue)
+    if problems:
+        raise ValueError("; ".join(problems))
+    return digest({"repository": repo.casefold(), "work": work,
+                   "title": issue["title"], "body": issue["body"], "policy": policy,
+                   "paths": sorted(p for p, grade in classification["paths"].items() if grade == "B")})
+
+
+def decision(classification, required_approval=None, approved_change=None):
     grade = classification["grade"]
     if grade == "A":
         return dict(classification, allowed=False, reason="A: owner must modify and merge manually")
     if grade == "C":
         return dict(classification, allowed=True, reason="C: ordinary contracts still apply")
-    owner = policy["owner"].casefold()
-    if pr["user"]["login"].casefold() == owner:
-        return dict(classification, allowed=False, reason="B: PR author and owner share identity; use manual user merge or a separate agent identity")
-    decisive = [r for r in reviews if (r.get("user") or {}).get("login", "").casefold() == owner
-                and r.get("state") in {"APPROVED", "CHANGES_REQUESTED", "DISMISSED"}]
-    last = max(decisive, key=lambda r: r["id"], default={})
-    allowed = last.get("state") == "APPROVED" and last.get("commit_id") == pr["head"]["sha"]
-    return dict(classification, allowed=allowed,
-                reason="B: independent owner approved exact head" if allowed else "B: independent owner approval of exact head required")
+    allowed = bool(required_approval and approved_change == required_approval)
+    return dict(classification, allowed=allowed, approval_digest=required_approval,
+                reason="B: caller attests explicit user approval of this change scope" if allowed
+                else "B: request explicit user approval before modification")
 
 
-def inspect_pr(repo, number, expected_head=None, expected_base=None):
+def inspect_pr(repo, number, expected_head=None, expected_base=None, approved_change=None):
     pr = api(f"repos/{repo}/pulls/{number}")
     head, base = pr["head"]["sha"], pr["base"]["sha"]
     if pr["state"] != "open" or pr["base"]["ref"] != "main" or pr["base"]["repo"]["full_name"].casefold() != repo.casefold():
@@ -103,24 +109,36 @@ def inspect_pr(repo, number, expected_head=None, expected_base=None):
     policy = read_policy(repo, base)
     files = pages(f"repos/{repo}/pulls/{number}/files?per_page=100")
     classification = classify(policy, changed_paths(files, pr["changed_files"]))
-    reviews = pages(f"repos/{repo}/pulls/{number}/reviews?per_page=100") if classification["grade"] == "B" else []
-    result = decision(policy, classification, pr, reviews)
+    required = None
+    if classification["grade"] == "B":
+        work = work_number(pr.get("body"))
+        issue = api(f"repos/{repo}/issues/{work}")
+        required = approval_scope(repo, work, issue, policy, classification)
+    result = decision(classification, required, approved_change)
     fresh = api(f"repos/{repo}/pulls/{number}")
     if (fresh["state"] != "open" or fresh["head"]["sha"] != head or fresh["base"]["sha"] != base
-            or fresh["base"]["ref"] != "main" or fresh["changed_files"] != pr["changed_files"]):
+            or fresh["base"]["ref"] != "main" or fresh["changed_files"] != pr["changed_files"]
+            or fresh.get("body") != pr.get("body")):
         raise ValueError("PR changed during authority check")
     return dict(result, head=head, base=base)
 
 
-def plan_paths(repo, paths):
+def plan_paths(repo, work, paths):
     base = api(f"repos/{repo}/branches/main")["commit"]["sha"]
-    result = classify(read_policy(repo, base), paths)
-    return dict(result, base=base, action={"A": "USER_ONLY", "B": "REQUEST_USER_APPROVAL", "C": "PLAN_IMPLEMENTATION"}[result["grade"]])
+    policy = read_policy(repo, base)
+    result = classify(policy, paths)
+    required = None
+    if result["grade"] == "B":
+        issue = api(f"repos/{repo}/issues/{work}")
+        required = approval_scope(repo, work, issue, policy, result)
+    return dict(result, work=work, base=base, approval_digest=required,
+                action={"A": "USER_ONLY", "B": "REQUEST_USER_APPROVAL", "C": "PLAN_IMPLEMENTATION"}[result["grade"]])
 
 
 class AuthorityTests(unittest.TestCase):
     policy = {"owner": "owner", "A": ["policy/"], "B": [".github/", "validation/", "app/"], "default": "C"}
-    pr = {"head": {"sha": "a"*40}, "user": {"login": "agent"}}
+    issue = {"number": 3, "title": "Work", "state": "open",
+             "body": "### Work type\n\nImplementation\n\n### Objective\n\nX\n\n### Scope\n\nX only\n\n### Acceptance criteria\n\nX passes"}
 
     def test_classification(self):
         self.assertEqual(classify(self.policy, ["README.md"])["grade"], "C")
@@ -138,15 +156,20 @@ class AuthorityTests(unittest.TestCase):
             changed_paths(files, 2)
 
     def test_approval(self):
-        review = {"id": 1, "user": {"login": "owner"}, "state": "APPROVED", "commit_id": "a"*40}
         b = classify(self.policy, ["validation/pr.py"])
-        self.assertFalse(decision(self.policy, b, self.pr, [])["allowed"])
-        self.assertTrue(decision(self.policy, b, self.pr, [review])["allowed"])
-        self.assertFalse(decision(self.policy, b, self.pr, [dict(review, commit_id="b"*40)])["allowed"])
-        self.assertFalse(decision(self.policy, b, self.pr, [review, dict(review, id=2, state="DISMISSED")])["allowed"])
-        self.assertFalse(decision(self.policy, b, dict(self.pr, user={"login":"owner"}), [review])["allowed"])
-        self.assertFalse(decision(self.policy, classify(self.policy, [POLICY_PATH]), self.pr, [review])["allowed"])
-        self.assertTrue(decision(self.policy, classify(self.policy, ["README.md"]), self.pr, [])["allowed"])
+        required = approval_scope("owner/repo", 3, self.issue, self.policy, b)
+        self.assertFalse(decision(b, required)["allowed"])
+        self.assertTrue(decision(b, required, required)["allowed"])
+        self.assertFalse(decision(b, required, "wrong")["allowed"])
+        self.assertFalse(decision(b, None, None)["allowed"])
+        self.assertFalse(decision(classify(self.policy, [POLICY_PATH]), required, required)["allowed"])
+        self.assertTrue(decision(classify(self.policy, ["README.md"]))["allowed"])
+        expanded = classify(self.policy, ["validation/pr.py", "validation/issue.py"])
+        self.assertNotEqual(required, approval_scope("owner/repo", 3, self.issue, self.policy, expanded))
+        extra_c = classify(self.policy, ["validation/pr.py", "README.md"])
+        self.assertEqual(required, approval_scope("owner/repo", 3, self.issue, self.policy, extra_c))
+        self.assertNotEqual(required, approval_scope("owner/repo", 3, dict(self.issue, title="changed"), self.policy, b))
+        self.assertNotEqual(required, approval_scope("owner/repo", 3, self.issue, dict(self.policy, default="B"), b))
 
     def test_fail_closed(self):
         with self.assertRaises(ValueError):
