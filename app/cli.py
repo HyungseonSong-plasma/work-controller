@@ -5,7 +5,7 @@ import subprocess
 import sys
 import unittest
 
-from validation import issue, pr, merge, completion, authority
+from validation import issue, pr, merge, completion, authority, approval
 from validation.model import REPO, SHA, api, digest
 from validation.merge import read_snapshot, verify
 from validation.completion import read_assessment, approved_close, guard_closed
@@ -57,7 +57,13 @@ def merge_command(argv):
         parser.error("Verification requires --expected-head")
     data = verify(args.repo, args.pr, args.approved_snapshot, args.expected_head)
     if args.merge:
-        permission = authority.inspect_pr(args.repo, args.pr, data["head"], data["base"], args.approved_change)
+        evidence = approval.inspect_pr(args.repo, args.pr, data["head"], data["base"])
+        if not evidence["allowed"]:
+            raise ValueError(evidence["reason"])
+        approved_change = evidence.get("approval_digest")
+        if args.approved_change and args.approved_change != approved_change:
+            raise ValueError("Supplied approval digest does not match recorded evidence")
+        permission = authority.inspect_pr(args.repo, args.pr, data["head"], data["base"], approved_change)
         if not permission["allowed"]:
             raise ValueError(permission["reason"])
         data = verify(args.repo, args.pr, args.approved_snapshot, args.expected_head)
@@ -141,9 +147,35 @@ def authority_command(argv):
     return int(not result["allowed"]) if args.pr is not None else 0
 
 
-COMMANDS = {"authority": authority_command, "issue": issue_command, "pr": pr_command, "merge": merge_command,
+def approval_command(argv):
+    parser = argparse.ArgumentParser(prog="approval")
+    parser.add_argument("--repo", required=True)
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--pr", type=int)
+    mode.add_argument("--work", type=int)
+    parser.add_argument("--path", nargs="+")
+    parser.add_argument("--approved-change")
+    parser.add_argument("--user-response")
+    parser.add_argument("--expected-head")
+    parser.add_argument("--expected-base")
+    args = parser.parse_args(argv)
+    if not REPO.fullmatch(args.repo):
+        parser.error("Expected owner/repo")
+    if args.work is not None:
+        if args.work < 1 or not args.path or not args.approved_change or not args.user_response or args.expected_head or args.expected_base:
+            parser.error("Recording requires --work, --path, --approved-change and --user-response")
+        result = approval.record(args.repo, args.work, args.path, args.approved_change, args.user_response)
+    else:
+        if args.pr < 1 or args.path or args.approved_change or args.user_response or bool(args.expected_head) != bool(args.expected_base):
+            parser.error("PR validation requires --pr and optionally both expected revisions")
+        result = approval.inspect_pr(args.repo, args.pr, args.expected_head, args.expected_base)
+    print(json.dumps(result, indent=2, ensure_ascii=False))
+    return int(not result["allowed"]) if args.pr is not None else 0
+
+
+COMMANDS = {"approval": approval_command, "authority": authority_command, "issue": issue_command, "pr": pr_command, "merge": merge_command,
             "completion": completion_command, "controller": controller_command}
-MODULES = {"authority": authority, "issue": issue, "pr": pr, "merge": merge, "completion": completion,
+MODULES = {"approval": approval, "authority": authority, "issue": issue, "pr": pr, "merge": merge, "completion": completion,
            "controller": decision_engine}
 
 
