@@ -1,0 +1,216 @@
+{
+  "version": 1,
+  "target": "validation.merge",
+  "cases": [
+    {
+      "name": "invalid_pr_1",
+      "function": "snapshot",
+      "args": [
+        {
+          "number": 4,
+          "state": "open",
+          "draft": true,
+          "title": "Change",
+          "body": "### Work\n\nRefs #3\n\n### Changes\n\nX\n\n### Verification\n\nTests pass",
+          "base": {
+            "ref": "main",
+            "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "repo": {
+              "full_name": "owner/repo"
+            }
+          },
+          "head": {
+            "sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          }
+        },
+        {
+          "number": 3,
+          "title": "Work",
+          "state": "open",
+          "body": "### Work type\n\nImplementation\n\n### Objective\n\nX\n\n### Scope\n\n#### Constraints\n\n- X only\n\n#### Actions\n\n- Implement X\n\n### Acceptance criteria\n\nX passes"
+        },
+        "owner/repo",
+        4
+      ],
+      "assert": {
+        "op": "raises",
+        "exception": "ValueError"
+      }
+    },
+    {
+      "name": "invalid_pr_2",
+      "function": "snapshot",
+      "args": [
+        {
+          "number": 4,
+          "state": "closed",
+          "draft": false,
+          "title": "Change",
+          "body": "### Work\n\nRefs #3\n\n### Changes\n\nX\n\n### Verification\n\nTests pass",
+          "base": {
+            "ref": "main",
+            "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "repo": {
+              "full_name": "owner/repo"
+            }
+          },
+          "head": {
+            "sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          }
+        },
+        {
+          "number": 3,
+          "title": "Work",
+          "state": "open",
+          "body": "### Work type\n\nImplementation\n\n### Objective\n\nX\n\n### Scope\n\n#### Constraints\n\n- X only\n\n#### Actions\n\n- Implement X\n\n### Acceptance criteria\n\nX passes"
+        },
+        "owner/repo",
+        4
+      ],
+      "assert": {
+        "op": "raises",
+        "exception": "ValueError"
+      }
+    },
+    {
+      "name": "invalid_pr_3",
+      "function": "snapshot",
+      "args": [
+        {
+          "number": 5,
+          "state": "open",
+          "draft": false,
+          "title": "Change",
+          "body": "### Work\n\nRefs #3\n\n### Changes\n\nX\n\n### Verification\n\nTests pass",
+          "base": {
+            "ref": "main",
+            "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "repo": {
+              "full_name": "owner/repo"
+            }
+          },
+          "head": {
+            "sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          }
+        },
+        {
+          "number": 3,
+          "title": "Work",
+          "state": "open",
+          "body": "### Work type\n\nImplementation\n\n### Objective\n\nX\n\n### Scope\n\n#### Constraints\n\n- X only\n\n#### Actions\n\n- Implement X\n\n### Acceptance criteria\n\nX passes"
+        },
+        "owner/repo",
+        4
+      ],
+      "assert": {
+        "op": "raises",
+        "exception": "ValueError"
+      }
+    },
+    {
+      "name": "invalid_pr_4",
+      "function": "snapshot",
+      "args": [
+        {
+          "number": 4,
+          "state": "open",
+          "draft": false,
+          "title": "Change",
+          "body": "### Work\n\nRefs #3\n\n### Changes\n\nX\n\n### Verification\n\nTests pass",
+          "base": {
+            "ref": "dev",
+            "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "repo": {
+              "full_name": "owner/repo"
+            }
+          },
+          "head": {
+            "sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          }
+        },
+        {
+          "number": 3,
+          "title": "Work",
+          "state": "open",
+          "body": "### Work type\n\nImplementation\n\n### Objective\n\nX\n\n### Scope\n\n#### Constraints\n\n- X only\n\n#### Actions\n\n- Implement X\n\n### Acceptance criteria\n\nX passes"
+        },
+        "owner/repo",
+        4
+      ],
+      "assert": {
+        "op": "raises",
+        "exception": "ValueError"
+      }
+    },
+    {
+      "name": "invalid_issue_1",
+      "function": "snapshot",
+      "args": [
+        {
+          "number": 4,
+          "state": "open",
+          "draft": false,
+          "title": "Change",
+          "body": "### Work\n\nRefs #3\n\n### Changes\n\nX\n\n### Verification\n\nTests pass",
+          "base": {
+            "ref": "main",
+            "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "repo": {
+              "full_name": "owner/repo"
+            }
+          },
+          "head": {
+            "sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          }
+        },
+        {
+          "number": 3,
+          "title": "Work",
+          "state": "closed",
+          "body": "### Work type\n\nImplementation\n\n### Objective\n\nX\n\n### Scope\n\n#### Constraints\n\n- X only\n\n#### Actions\n\n- Implement X\n\n### Acceptance criteria\n\nX passes"
+        },
+        "owner/repo",
+        4
+      ],
+      "assert": {
+        "op": "raises",
+        "exception": "ValueError"
+      }
+    },
+    {
+      "name": "invalid_issue_2",
+      "function": "snapshot",
+      "args": [
+        {
+          "number": 4,
+          "state": "open",
+          "draft": false,
+          "title": "Change",
+          "body": "### Work\n\nRefs #3\n\n### Changes\n\nX\n\n### Verification\n\nTests pass",
+          "base": {
+            "ref": "main",
+            "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "repo": {
+              "full_name": "owner/repo"
+            }
+          },
+          "head": {
+            "sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          }
+        },
+        {
+          "number": 3,
+          "title": "Work",
+          "state": "open",
+          "body": ""
+        },
+        "owner/repo",
+        4
+      ],
+      "assert": {
+        "op": "raises",
+        "exception": "ValueError"
+      }
+    }
+  ]
+}

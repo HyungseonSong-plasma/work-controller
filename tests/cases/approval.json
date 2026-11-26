@@ -1,0 +1,1148 @@
+{
+  "version": 1,
+  "target": "validation.approval",
+  "cases": [
+    {
+      "name": "approval_states_approved",
+      "function": "evaluate_state",
+      "args": [
+        "owner/repo",
+        3,
+        {
+          "number": 3,
+          "title": "Work",
+          "state": "open",
+          "body": "### Work type\n\nImplementation\n\n### Objective\n\nX\n\n### Scope\n\n#### Constraints\n\n- X only\n\n#### Actions\n\n- Implement X\n\n### Acceptance criteria\n\nX passes",
+          "labels": [
+            {
+              "name": "B-rank: approved"
+            }
+          ]
+        },
+        {
+          "owner": "owner",
+          "A": [],
+          "B": [
+            "app/",
+            "validation/"
+          ],
+          "default": "C"
+        },
+        [
+          {
+            "id": 10,
+            "created_at": "2026-01-01T00:00:02Z",
+            "updated_at": "2026-01-01T00:00:02Z",
+            "body": "### B-rank Approval Request\n\n```json\n{\n  \"paths\": [\n    \"app/cli.py\"\n  ],\n  \"digest\": \"e4dac632f533004e35cb557b5c907e5b4380a3c30636d9a3e182e2d7fa09ed82\"\n}\n```"
+          }
+        ],
+        [
+          {
+            "id": 1,
+            "event": "labeled",
+            "label": {
+              "name": "B-rank: pending"
+            },
+            "actor": {
+              "login": "owner"
+            },
+            "created_at": "2026-01-01T00:00:01Z"
+          },
+          {
+            "id": 3,
+            "event": "unlabeled",
+            "label": {
+              "name": "B-rank: pending"
+            },
+            "actor": {
+              "login": "owner"
+            },
+            "created_at": "2026-01-01T00:00:03Z"
+          },
+          {
+            "id": 4,
+            "event": "labeled",
+            "label": {
+              "name": "B-rank: approved"
+            },
+            "actor": {
+              "login": "owner"
+            },
+            "created_at": "2026-01-01T00:00:04Z"
+          }
+        ],
+        [
+          "app/cli.py"
+        ]
+      ],
+      "assert": {
+        "op": "equal",
+        "value": "APPROVED"
+      }
+    },
+    {
+      "name": "approval_states_pending",
+      "function": "evaluate_state",
+      "args": [
+        "owner/repo",
+        3,
+        {
+          "number": 3,
+          "title": "Work",
+          "state": "open",
+          "body": "### Work type\n\nImplementation\n\n### Objective\n\nX\n\n### Scope\n\n#### Constraints\n\n- X only\n\n#### Actions\n\n- Implement X\n\n### Acceptance criteria\n\nX passes",
+          "labels": [
+            {
+              "name": "B-rank: pending"
+            }
+          ]
+        },
+        {
+          "owner": "owner",
+          "A": [],
+          "B": [
+            "app/",
+            "validation/"
+          ],
+          "default": "C"
+        },
+        [
+          {
+            "id": 10,
+            "created_at": "2026-01-01T00:00:02Z",
+            "updated_at": "2026-01-01T00:00:02Z",
+            "body": "### B-rank Approval Request\n\n```json\n{\n  \"paths\": [\n    \"app/cli.py\"\n  ],\n  \"digest\": \"e4dac632f533004e35cb557b5c907e5b4380a3c30636d9a3e182e2d7fa09ed82\"\n}\n```"
+          }
+        ],
+        [
+          {
+            "id": 1,
+            "event": "labeled",
+            "label": {
+              "name": "B-rank: pending"
+            },
+            "actor": {
+              "login": "owner"
+            },
+            "created_at": "2026-01-01T00:00:01Z"
+          }
+        ],
+        [
+          "app/cli.py"
+        ]
+      ],
+      "assert": {
+        "op": "equal",
+        "value": "PENDING"
+      }
+    },
+    {
+      "name": "approval_states_revoked",
+      "function": "evaluate_state",
+      "args": [
+        "owner/repo",
+        3,
+        {
+          "number": 3,
+          "title": "Work",
+          "state": "open",
+          "body": "### Work type\n\nImplementation\n\n### Objective\n\nX\n\n### Scope\n\n#### Constraints\n\n- X only\n\n#### Actions\n\n- Implement X\n\n### Acceptance criteria\n\nX passes",
+          "labels": [
+            {
+              "name": "B-rank: revoked"
+            }
+          ]
+        },
+        {
+          "owner": "owner",
+          "A": [],
+          "B": [
+            "app/",
+            "validation/"
+          ],
+          "default": "C"
+        },
+        [
+          {
+            "id": 10,
+            "created_at": "2026-01-01T00:00:02Z",
+            "updated_at": "2026-01-01T00:00:02Z",
+            "body": "### B-rank Approval Request\n\n```json\n{\n  \"paths\": [\n    \"app/cli.py\"\n  ],\n  \"digest\": \"e4dac632f533004e35cb557b5c907e5b4380a3c30636d9a3e182e2d7fa09ed82\"\n}\n```"
+          }
+        ],
+        [
+          {
+            "id": 1,
+            "event": "labeled",
+            "label": {
+              "name": "B-rank: pending"
+            },
+            "actor": {
+              "login": "owner"
+            },
+            "created_at": "2026-01-01T00:00:01Z"
+          },
+          {
+            "id": 3,
+            "event": "unlabeled",
+            "label": {
+              "name": "B-rank: pending"
+            },
+            "actor": {
+              "login": "owner"
+            },
+            "created_at": "2026-01-01T00:00:03Z"
+          },
+          {
+            "id": 4,
+            "event": "labeled",
+            "label": {
+              "name": "B-rank: approved"
+            },
+            "actor": {
+              "login": "owner"
+            },
+            "created_at": "2026-01-01T00:00:04Z"
+          }
+        ],
+        null
+      ],
+      "assert": {
+        "op": "equal",
+        "value": "REVOKED"
+      }
+    },
+    {
+      "name": "approval_states_removed",
+      "function": "evaluate_state",
+      "args": [
+        "owner/repo",
+        3,
+        {
+          "number": 3,
+          "title": "Work",
+          "state": "open",
+          "body": "### Work type\n\nImplementation\n\n### Objective\n\nX\n\n### Scope\n\n#### Constraints\n\n- X only\n\n#### Actions\n\n- Implement X\n\n### Acceptance criteria\n\nX passes",
+          "labels": []
+        },
+        {
+          "owner": "owner",
+          "A": [],
+          "B": [
+            "app/",
+            "validation/"
+          ],
+          "default": "C"
+        },
+        [
+          {
+            "id": 10,
+            "created_at": "2026-01-01T00:00:02Z",
+            "updated_at": "2026-01-01T00:00:02Z",
+            "body": "### B-rank Approval Request\n\n```json\n{\n  \"paths\": [\n    \"app/cli.py\"\n  ],\n  \"digest\": \"e4dac632f533004e35cb557b5c907e5b4380a3c30636d9a3e182e2d7fa09ed82\"\n}\n```"
+          }
+        ],
+        [
+          {
+            "id": 1,
+            "event": "labeled",
+            "label": {
+              "name": "B-rank: pending"
+            },
+            "actor": {
+              "login": "owner"
+            },
+            "created_at": "2026-01-01T00:00:01Z"
+          },
+          {
+            "id": 3,
+            "event": "unlabeled",
+            "label": {
+              "name": "B-rank: pending"
+            },
+            "actor": {
+              "login": "owner"
+            },
+            "created_at": "2026-01-01T00:00:03Z"
+          },
+          {
+            "id": 4,
+            "event": "labeled",
+            "label": {
+              "name": "B-rank: approved"
+            },
+            "actor": {
+              "login": "owner"
+            },
+            "created_at": "2026-01-01T00:00:04Z"
+          },
+          {
+            "id": 5,
+            "event": "unlabeled",
+            "label": {
+              "name": "B-rank: approved"
+            },
+            "actor": {
+              "login": "owner"
+            },
+            "created_at": "2026-01-01T00:00:04Z"
+          }
+        ],
+        null
+      ],
+      "assert": {
+        "op": "equal",
+        "value": "REVOKED"
+      }
+    },
+    {
+      "name": "approval_states_not_requested",
+      "function": "evaluate_state",
+      "args": [
+        "owner/repo",
+        3,
+        {
+          "number": 3,
+          "title": "Work",
+          "state": "open",
+          "body": "### Work type\n\nImplementation\n\n### Objective\n\nX\n\n### Scope\n\n#### Constraints\n\n- X only\n\n#### Actions\n\n- Implement X\n\n### Acceptance criteria\n\nX passes",
+          "labels": []
+        },
+        {
+          "owner": "owner",
+          "A": [],
+          "B": [
+            "app/",
+            "validation/"
+          ],
+          "default": "C"
+        },
+        [],
+        [],
+        null
+      ],
+      "assert": {
+        "op": "equal",
+        "value": "NOT_REQUESTED"
+      }
+    },
+    {
+      "name": "approval_states_unrequested_paths",
+      "function": "evaluate_state",
+      "args": [
+        "owner/repo",
+        3,
+        {
+          "number": 3,
+          "title": "Work",
+          "state": "open",
+          "body": "### Work type\n\nImplementation\n\n### Objective\n\nX\n\n### Scope\n\n#### Constraints\n\n- X only\n\n#### Actions\n\n- Implement X\n\n### Acceptance criteria\n\nX passes",
+          "labels": []
+        },
+        {
+          "owner": "owner",
+          "A": [],
+          "B": [
+            "app/",
+            "validation/"
+          ],
+          "default": "C"
+        },
+        [],
+        [],
+        [
+          "app/cli.py"
+        ]
+      ],
+      "assert": {
+        "op": "equal",
+        "value": "HUMAN_REVIEW"
+      }
+    },
+    {
+      "name": "abnormal_comments_1",
+      "function": "evaluate_state",
+      "args": [
+        "owner/repo",
+        3,
+        {
+          "number": 3,
+          "title": "Work",
+          "state": "open",
+          "body": "### Work type\n\nImplementation\n\n### Objective\n\nX\n\n### Scope\n\n#### Constraints\n\n- X only\n\n#### Actions\n\n- Implement X\n\n### Acceptance criteria\n\nX passes",
+          "labels": [
+            {
+              "name": "B-rank: approved"
+            }
+          ]
+        },
+        {
+          "owner": "owner",
+          "A": [],
+          "B": [
+            "app/",
+            "validation/"
+          ],
+          "default": "C"
+        },
+        [],
+        [
+          {
+            "id": 1,
+            "event": "labeled",
+            "label": {
+              "name": "B-rank: pending"
+            },
+            "actor": {
+              "login": "owner"
+            },
+            "created_at": "2026-01-01T00:00:01Z"
+          },
+          {
+            "id": 3,
+            "event": "unlabeled",
+            "label": {
+              "name": "B-rank: pending"
+            },
+            "actor": {
+              "login": "owner"
+            },
+            "created_at": "2026-01-01T00:00:03Z"
+          },
+          {
+            "id": 4,
+            "event": "labeled",
+            "label": {
+              "name": "B-rank: approved"
+            },
+            "actor": {
+              "login": "owner"
+            },
+            "created_at": "2026-01-01T00:00:04Z"
+          }
+        ],
+        [
+          "app/cli.py"
+        ]
+      ],
+      "assert": {
+        "op": "equal",
+        "value": "HUMAN_REVIEW"
+      }
+    },
+    {
+      "name": "abnormal_comments_2",
+      "function": "evaluate_state",
+      "args": [
+        "owner/repo",
+        3,
+        {
+          "number": 3,
+          "title": "Work",
+          "state": "open",
+          "body": "### Work type\n\nImplementation\n\n### Objective\n\nX\n\n### Scope\n\n#### Constraints\n\n- X only\n\n#### Actions\n\n- Implement X\n\n### Acceptance criteria\n\nX passes",
+          "labels": [
+            {
+              "name": "B-rank: approved"
+            }
+          ]
+        },
+        {
+          "owner": "owner",
+          "A": [],
+          "B": [
+            "app/",
+            "validation/"
+          ],
+          "default": "C"
+        },
+        [
+          {
+            "id": 10,
+            "created_at": "2026-01-01T00:00:02Z",
+            "updated_at": "later",
+            "body": "### B-rank Approval Request\n\n```json\n{\n  \"paths\": [\n    \"app/cli.py\"\n  ],\n  \"digest\": \"e4dac632f533004e35cb557b5c907e5b4380a3c30636d9a3e182e2d7fa09ed82\"\n}\n```"
+          }
+        ],
+        [
+          {
+            "id": 1,
+            "event": "labeled",
+            "label": {
+              "name": "B-rank: pending"
+            },
+            "actor": {
+              "login": "owner"
+            },
+            "created_at": "2026-01-01T00:00:01Z"
+          },
+          {
+            "id": 3,
+            "event": "unlabeled",
+            "label": {
+              "name": "B-rank: pending"
+            },
+            "actor": {
+              "login": "owner"
+            },
+            "created_at": "2026-01-01T00:00:03Z"
+          },
+          {
+            "id": 4,
+            "event": "labeled",
+            "label": {
+              "name": "B-rank: approved"
+            },
+            "actor": {
+              "login": "owner"
+            },
+            "created_at": "2026-01-01T00:00:04Z"
+          }
+        ],
+        [
+          "app/cli.py"
+        ]
+      ],
+      "assert": {
+        "op": "equal",
+        "value": "HUMAN_REVIEW"
+      }
+    },
+    {
+      "name": "abnormal_comments_3",
+      "function": "evaluate_state",
+      "args": [
+        "owner/repo",
+        3,
+        {
+          "number": 3,
+          "title": "Work",
+          "state": "open",
+          "body": "### Work type\n\nImplementation\n\n### Objective\n\nX\n\n### Scope\n\n#### Constraints\n\n- X only\n\n#### Actions\n\n- Implement X\n\n### Acceptance criteria\n\nX passes",
+          "labels": [
+            {
+              "name": "B-rank: approved"
+            }
+          ]
+        },
+        {
+          "owner": "owner",
+          "A": [],
+          "B": [
+            "app/",
+            "validation/"
+          ],
+          "default": "C"
+        },
+        [
+          {
+            "id": 10,
+            "created_at": "2026-01-01T00:00:02Z",
+            "updated_at": "2026-01-01T00:00:02Z",
+            "body": "### B-rank Approval Request\n\n```json\n{\n  \"paths\": [\n    \"app/cli.py\"\n  ],\n  \"digest\": \"e4dac632f533004e35cb557b5c907e5b4380a3c30636d9a3e182e2d7fa09ed82\"\n}\n```"
+          },
+          {
+            "id": 10,
+            "created_at": "2026-01-01T00:00:02Z",
+            "updated_at": "2026-01-01T00:00:02Z",
+            "body": "### B-rank Approval Request\n\n```json\n{\n  \"paths\": [\n    \"app/cli.py\"\n  ],\n  \"digest\": \"e4dac632f533004e35cb557b5c907e5b4380a3c30636d9a3e182e2d7fa09ed82\"\n}\n```"
+          }
+        ],
+        [
+          {
+            "id": 1,
+            "event": "labeled",
+            "label": {
+              "name": "B-rank: pending"
+            },
+            "actor": {
+              "login": "owner"
+            },
+            "created_at": "2026-01-01T00:00:01Z"
+          },
+          {
+            "id": 3,
+            "event": "unlabeled",
+            "label": {
+              "name": "B-rank: pending"
+            },
+            "actor": {
+              "login": "owner"
+            },
+            "created_at": "2026-01-01T00:00:03Z"
+          },
+          {
+            "id": 4,
+            "event": "labeled",
+            "label": {
+              "name": "B-rank: approved"
+            },
+            "actor": {
+              "login": "owner"
+            },
+            "created_at": "2026-01-01T00:00:04Z"
+          }
+        ],
+        [
+          "app/cli.py"
+        ]
+      ],
+      "assert": {
+        "op": "equal",
+        "value": "HUMAN_REVIEW"
+      }
+    },
+    {
+      "name": "abnormal_comments_4",
+      "function": "evaluate_state",
+      "args": [
+        "owner/repo",
+        3,
+        {
+          "number": 3,
+          "title": "Work",
+          "state": "open",
+          "body": "### Work type\n\nImplementation\n\n### Objective\n\nX\n\n### Scope\n\n#### Constraints\n\n- X only\n\n#### Actions\n\n- Implement X\n\n### Acceptance criteria\n\nX passes",
+          "labels": [
+            {
+              "name": "B-rank: approved"
+            }
+          ]
+        },
+        {
+          "owner": "owner",
+          "A": [],
+          "B": [
+            "app/",
+            "validation/"
+          ],
+          "default": "C"
+        },
+        [
+          {
+            "id": 10,
+            "created_at": "2026-01-01T00:00:02Z",
+            "updated_at": "2026-01-01T00:00:02Z",
+            "body": "### B-rank Approval Request bad"
+          }
+        ],
+        [
+          {
+            "id": 1,
+            "event": "labeled",
+            "label": {
+              "name": "B-rank: pending"
+            },
+            "actor": {
+              "login": "owner"
+            },
+            "created_at": "2026-01-01T00:00:01Z"
+          },
+          {
+            "id": 3,
+            "event": "unlabeled",
+            "label": {
+              "name": "B-rank: pending"
+            },
+            "actor": {
+              "login": "owner"
+            },
+            "created_at": "2026-01-01T00:00:03Z"
+          },
+          {
+            "id": 4,
+            "event": "labeled",
+            "label": {
+              "name": "B-rank: approved"
+            },
+            "actor": {
+              "login": "owner"
+            },
+            "created_at": "2026-01-01T00:00:04Z"
+          }
+        ],
+        [
+          "app/cli.py"
+        ]
+      ],
+      "assert": {
+        "op": "equal",
+        "value": "HUMAN_REVIEW"
+      }
+    },
+    {
+      "name": "abnormal_conflicting_labels",
+      "function": "evaluate_state",
+      "args": [
+        "owner/repo",
+        3,
+        {
+          "number": 3,
+          "title": "Work",
+          "state": "open",
+          "body": "### Work type\n\nImplementation\n\n### Objective\n\nX\n\n### Scope\n\n#### Constraints\n\n- X only\n\n#### Actions\n\n- Implement X\n\n### Acceptance criteria\n\nX passes",
+          "labels": [
+            {
+              "name": "B-rank: approved"
+            },
+            {
+              "name": "B-rank: pending"
+            }
+          ]
+        },
+        {
+          "owner": "owner",
+          "A": [],
+          "B": [
+            "app/",
+            "validation/"
+          ],
+          "default": "C"
+        },
+        [
+          {
+            "id": 10,
+            "created_at": "2026-01-01T00:00:02Z",
+            "updated_at": "2026-01-01T00:00:02Z",
+            "body": "### B-rank Approval Request\n\n```json\n{\n  \"paths\": [\n    \"app/cli.py\"\n  ],\n  \"digest\": \"e4dac632f533004e35cb557b5c907e5b4380a3c30636d9a3e182e2d7fa09ed82\"\n}\n```"
+          }
+        ],
+        [
+          {
+            "id": 1,
+            "event": "labeled",
+            "label": {
+              "name": "B-rank: pending"
+            },
+            "actor": {
+              "login": "owner"
+            },
+            "created_at": "2026-01-01T00:00:01Z"
+          },
+          {
+            "id": 3,
+            "event": "unlabeled",
+            "label": {
+              "name": "B-rank: pending"
+            },
+            "actor": {
+              "login": "owner"
+            },
+            "created_at": "2026-01-01T00:00:03Z"
+          },
+          {
+            "id": 4,
+            "event": "labeled",
+            "label": {
+              "name": "B-rank: approved"
+            },
+            "actor": {
+              "login": "owner"
+            },
+            "created_at": "2026-01-01T00:00:04Z"
+          }
+        ],
+        null
+      ],
+      "assert": {
+        "op": "equal",
+        "value": "HUMAN_REVIEW"
+      }
+    },
+    {
+      "name": "abnormal_different_paths",
+      "function": "evaluate_state",
+      "args": [
+        "owner/repo",
+        3,
+        {
+          "number": 3,
+          "title": "Work",
+          "state": "open",
+          "body": "### Work type\n\nImplementation\n\n### Objective\n\nX\n\n### Scope\n\n#### Constraints\n\n- X only\n\n#### Actions\n\n- Implement X\n\n### Acceptance criteria\n\nX passes",
+          "labels": [
+            {
+              "name": "B-rank: approved"
+            }
+          ]
+        },
+        {
+          "owner": "owner",
+          "A": [],
+          "B": [
+            "app/",
+            "validation/"
+          ],
+          "default": "C"
+        },
+        [
+          {
+            "id": 10,
+            "created_at": "2026-01-01T00:00:02Z",
+            "updated_at": "2026-01-01T00:00:02Z",
+            "body": "### B-rank Approval Request\n\n```json\n{\n  \"paths\": [\n    \"app/cli.py\"\n  ],\n  \"digest\": \"e4dac632f533004e35cb557b5c907e5b4380a3c30636d9a3e182e2d7fa09ed82\"\n}\n```"
+          }
+        ],
+        [
+          {
+            "id": 1,
+            "event": "labeled",
+            "label": {
+              "name": "B-rank: pending"
+            },
+            "actor": {
+              "login": "owner"
+            },
+            "created_at": "2026-01-01T00:00:01Z"
+          },
+          {
+            "id": 3,
+            "event": "unlabeled",
+            "label": {
+              "name": "B-rank: pending"
+            },
+            "actor": {
+              "login": "owner"
+            },
+            "created_at": "2026-01-01T00:00:03Z"
+          },
+          {
+            "id": 4,
+            "event": "labeled",
+            "label": {
+              "name": "B-rank: approved"
+            },
+            "actor": {
+              "login": "owner"
+            },
+            "created_at": "2026-01-01T00:00:04Z"
+          }
+        ],
+        [
+          "validation/pr.py"
+        ]
+      ],
+      "assert": {
+        "op": "equal",
+        "value": "HUMAN_REVIEW"
+      }
+    },
+    {
+      "name": "abnormal_changed_title",
+      "function": "evaluate_state",
+      "args": [
+        "owner/repo",
+        3,
+        {
+          "number": 3,
+          "title": "Changed",
+          "state": "open",
+          "body": "### Work type\n\nImplementation\n\n### Objective\n\nX\n\n### Scope\n\n#### Constraints\n\n- X only\n\n#### Actions\n\n- Implement X\n\n### Acceptance criteria\n\nX passes",
+          "labels": [
+            {
+              "name": "B-rank: approved"
+            }
+          ]
+        },
+        {
+          "owner": "owner",
+          "A": [],
+          "B": [
+            "app/",
+            "validation/"
+          ],
+          "default": "C"
+        },
+        [
+          {
+            "id": 10,
+            "created_at": "2026-01-01T00:00:02Z",
+            "updated_at": "2026-01-01T00:00:02Z",
+            "body": "### B-rank Approval Request\n\n```json\n{\n  \"paths\": [\n    \"app/cli.py\"\n  ],\n  \"digest\": \"e4dac632f533004e35cb557b5c907e5b4380a3c30636d9a3e182e2d7fa09ed82\"\n}\n```"
+          }
+        ],
+        [
+          {
+            "id": 1,
+            "event": "labeled",
+            "label": {
+              "name": "B-rank: pending"
+            },
+            "actor": {
+              "login": "owner"
+            },
+            "created_at": "2026-01-01T00:00:01Z"
+          },
+          {
+            "id": 3,
+            "event": "unlabeled",
+            "label": {
+              "name": "B-rank: pending"
+            },
+            "actor": {
+              "login": "owner"
+            },
+            "created_at": "2026-01-01T00:00:03Z"
+          },
+          {
+            "id": 4,
+            "event": "labeled",
+            "label": {
+              "name": "B-rank: approved"
+            },
+            "actor": {
+              "login": "owner"
+            },
+            "created_at": "2026-01-01T00:00:04Z"
+          }
+        ],
+        [
+          "app/cli.py"
+        ]
+      ],
+      "assert": {
+        "op": "equal",
+        "value": "HUMAN_REVIEW"
+      }
+    },
+    {
+      "name": "abnormal_wrong_actor",
+      "function": "evaluate_state",
+      "args": [
+        "owner/repo",
+        3,
+        {
+          "number": 3,
+          "title": "Work",
+          "state": "open",
+          "body": "### Work type\n\nImplementation\n\n### Objective\n\nX\n\n### Scope\n\n#### Constraints\n\n- X only\n\n#### Actions\n\n- Implement X\n\n### Acceptance criteria\n\nX passes",
+          "labels": [
+            {
+              "name": "B-rank: approved"
+            }
+          ]
+        },
+        {
+          "owner": "owner",
+          "A": [],
+          "B": [
+            "app/",
+            "validation/"
+          ],
+          "default": "C"
+        },
+        [
+          {
+            "id": 10,
+            "created_at": "2026-01-01T00:00:02Z",
+            "updated_at": "2026-01-01T00:00:02Z",
+            "body": "### B-rank Approval Request\n\n```json\n{\n  \"paths\": [\n    \"app/cli.py\"\n  ],\n  \"digest\": \"e4dac632f533004e35cb557b5c907e5b4380a3c30636d9a3e182e2d7fa09ed82\"\n}\n```"
+          }
+        ],
+        [
+          {
+            "id": 1,
+            "event": "labeled",
+            "label": {
+              "name": "B-rank: pending"
+            },
+            "actor": {
+              "login": "owner"
+            },
+            "created_at": "2026-01-01T00:00:01Z"
+          },
+          {
+            "id": 3,
+            "event": "unlabeled",
+            "label": {
+              "name": "B-rank: pending"
+            },
+            "actor": {
+              "login": "owner"
+            },
+            "created_at": "2026-01-01T00:00:03Z"
+          },
+          {
+            "id": 4,
+            "event": "labeled",
+            "label": {
+              "name": "B-rank: approved"
+            },
+            "actor": {
+              "login": "other"
+            },
+            "created_at": "2026-01-01T00:00:04Z"
+          }
+        ],
+        null
+      ],
+      "assert": {
+        "op": "equal",
+        "value": "HUMAN_REVIEW"
+      }
+    },
+    {
+      "name": "abnormal_new_epoch",
+      "function": "evaluate_state",
+      "args": [
+        "owner/repo",
+        3,
+        {
+          "number": 3,
+          "title": "Work",
+          "state": "open",
+          "body": "### Work type\n\nImplementation\n\n### Objective\n\nX\n\n### Scope\n\n#### Constraints\n\n- X only\n\n#### Actions\n\n- Implement X\n\n### Acceptance criteria\n\nX passes",
+          "labels": [
+            {
+              "name": "B-rank: approved"
+            }
+          ]
+        },
+        {
+          "owner": "owner",
+          "A": [],
+          "B": [
+            "app/",
+            "validation/"
+          ],
+          "default": "C"
+        },
+        [
+          {
+            "id": 10,
+            "created_at": "2026-01-01T00:00:02Z",
+            "updated_at": "2026-01-01T00:00:02Z",
+            "body": "### B-rank Approval Request\n\n```json\n{\n  \"paths\": [\n    \"app/cli.py\"\n  ],\n  \"digest\": \"e4dac632f533004e35cb557b5c907e5b4380a3c30636d9a3e182e2d7fa09ed82\"\n}\n```"
+          }
+        ],
+        [
+          {
+            "id": 1,
+            "event": "labeled",
+            "label": {
+              "name": "B-rank: pending"
+            },
+            "actor": {
+              "login": "owner"
+            },
+            "created_at": "2026-01-01T00:00:01Z"
+          },
+          {
+            "id": 3,
+            "event": "unlabeled",
+            "label": {
+              "name": "B-rank: pending"
+            },
+            "actor": {
+              "login": "owner"
+            },
+            "created_at": "2026-01-01T00:00:03Z"
+          },
+          {
+            "id": 4,
+            "event": "labeled",
+            "label": {
+              "name": "B-rank: approved"
+            },
+            "actor": {
+              "login": "owner"
+            },
+            "created_at": "2026-01-01T00:00:04Z"
+          },
+          {
+            "id": 5,
+            "event": "labeled",
+            "label": {
+              "name": "B-rank: pending"
+            },
+            "actor": {
+              "login": "owner"
+            },
+            "created_at": "2026-01-01T00:00:05Z"
+          }
+        ],
+        null
+      ],
+      "assert": {
+        "op": "equal",
+        "value": "HUMAN_REVIEW"
+      }
+    },
+    {
+      "name": "abnormal_same_timestamp",
+      "function": "evaluate_state",
+      "args": [
+        "owner/repo",
+        3,
+        {
+          "number": 3,
+          "title": "Work",
+          "state": "open",
+          "body": "### Work type\n\nImplementation\n\n### Objective\n\nX\n\n### Scope\n\n#### Constraints\n\n- X only\n\n#### Actions\n\n- Implement X\n\n### Acceptance criteria\n\nX passes",
+          "labels": [
+            {
+              "name": "B-rank: approved"
+            }
+          ]
+        },
+        {
+          "owner": "owner",
+          "A": [],
+          "B": [
+            "app/",
+            "validation/"
+          ],
+          "default": "C"
+        },
+        [
+          {
+            "id": 10,
+            "created_at": "2026-01-01T00:00:02Z",
+            "updated_at": "2026-01-01T00:00:02Z",
+            "body": "### B-rank Approval Request\n\n```json\n{\n  \"paths\": [\n    \"app/cli.py\"\n  ],\n  \"digest\": \"e4dac632f533004e35cb557b5c907e5b4380a3c30636d9a3e182e2d7fa09ed82\"\n}\n```"
+          }
+        ],
+        [
+          {
+            "id": 1,
+            "event": "labeled",
+            "label": {
+              "name": "B-rank: pending"
+            },
+            "actor": {
+              "login": "owner"
+            },
+            "created_at": "2026-01-01T00:00:01Z"
+          },
+          {
+            "id": 3,
+            "event": "unlabeled",
+            "label": {
+              "name": "B-rank: pending"
+            },
+            "actor": {
+              "login": "owner"
+            },
+            "created_at": "2026-01-01T00:00:03Z"
+          },
+          {
+            "id": 4,
+            "event": "labeled",
+            "label": {
+              "name": "B-rank: approved"
+            },
+            "actor": {
+              "login": "owner"
+            },
+            "created_at": "2026-01-01T00:00:02Z"
+          }
+        ],
+        null
+      ],
+      "assert": {
+        "op": "equal",
+        "value": "HUMAN_REVIEW"
+      }
+    }
+  ]
+}

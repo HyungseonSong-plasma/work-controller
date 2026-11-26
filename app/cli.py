@@ -259,6 +259,7 @@ def main(argv=None):
         suite = unittest.TestSuite()
         for name in names:
             if name in runner.FILES:
+                # The shared runner loads JSON and any registered Python scenarios.
                 suite.addTests(runner.load_suite(name))
             else:
                 suite.addTests(unittest.defaultTestLoader.loadTestsFromModule(MODULES[name]))
