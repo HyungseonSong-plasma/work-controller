@@ -16,9 +16,8 @@ from controller.decision_engine import discover
 
 def issue_command(argv):
     parser = argparse.ArgumentParser(prog="issue")
-    parser.add_argument("--require-type", action="store_true")
-    args = parser.parse_args(argv)
-    return int(not issue.validate(sys.stdin.read(), require_type=args.require_type))
+    parser.parse_args(argv)
+    return int(not issue.validate(sys.stdin.read()))
 
 
 def pr_command(argv):

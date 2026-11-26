@@ -22,7 +22,15 @@ body:
     id: scope
     attributes:
       label: Scope
-      description: What is included and, where needed, excluded?
+      description: Replace both example bullets with concise restrictions and intended actions. Do not repeat Objective or Acceptance criteria.
+      value: |
+        #### Constraints
+
+        - TBD
+
+        #### Actions
+
+        - TBD
     validations:
       required: true
   - type: textarea

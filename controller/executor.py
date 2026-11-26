@@ -219,7 +219,7 @@ def live_ci():
     policy = authority.read_policy(repo, base)
     require(authority.classify(policy, [path])["grade"] == "C", "Fixture path is not C-grade")
     issue = api(f"{root}/issues", "-X", "POST", "-f", f"title=[TEST] Executor CI {run_id}",
-                "-f", "body=### Work type\n\nImplementation\n\n### Objective\n\nVerify the real Executor publication path.\n\n### Scope\n\nCreate only the disposable C-grade fixture " + path + ". Do not merge.\n\n### Acceptance criteria\n\nVerify dry-run, publication and cleanup without merging.")
+                "-f", "body=### Work type\n\nImplementation\n\n### Objective\n\nVerify the real Executor publication path.\n\n### Scope\n\n#### Constraints\n\n- C-grade fixture only; do not merge.\n\n#### Actions\n\n- Create and verify disposable fixture " + path + ".\n\n### Acceptance criteria\n\nVerify dry-run, publication and cleanup without merging.")
     work = issue["number"]
     note(f"Fixture Work: #{work}")
     plan = {"title": f"[TEST] Executor CI {run_id} — do not merge",
@@ -281,7 +281,7 @@ class ExecutorTests(unittest.TestCase):
     tree = "b"*40
     commit = "c"*40
     issue = {"number": 4, "state": "open", "title": "Work",
-             "body": "### Work type\n\nImplementation\n\n### Objective\n\nX\n\n### Scope\n\nX\n\n### Acceptance criteria\n\nX passes", "labels": []}
+             "body": "### Work type\n\nImplementation\n\n### Objective\n\nX\n\n### Scope\n\n#### Constraints\n\n- X only\n\n#### Actions\n\n- Implement X\n\n### Acceptance criteria\n\nX passes", "labels": []}
     policy = {"owner": "owner", "A": [], "B": ["app/"], "default": "C"}
 
     def plan(self, path="README.md", content="new"):

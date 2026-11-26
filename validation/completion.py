@@ -123,7 +123,7 @@ def guard_closed(repo, number):
 class CompletionTests(unittest.TestCase):
     repo = "owner/repo"
     issue = {"number": 3, "title": "Work", "state": "open",
-             "body": "### Objective\n\nX\n\n### Scope\n\nX only\n\n### Acceptance criteria\n\nX passes"}
+             "body": "### Work type\n\nImplementation\n\n### Objective\n\nX\n\n### Scope\n\n#### Constraints\n\n- X only\n\n#### Actions\n\n- Implement X\n\n### Acceptance criteria\n\nX passes"}
     pr = {"number": 4, "title": "Change", "state": "closed", "merged_at": "2026-01-01",
           "merge_commit_sha": "a"*40, "body": "### Work\n\nRefs #3\n\n### Changes\n\nX\n\n### Verification\n\nTests pass",
           "base": {"ref": "main", "repo": {"full_name": repo}}, "head": {"sha": "b"*40}}
@@ -174,7 +174,7 @@ class CompletionTests(unittest.TestCase):
             call.assert_not_called()
 
     def test_read_only_completion(self):
-        issue = dict(self.issue, body="### Work type\n\nRead-only\n\n" + self.issue["body"])
+        issue = dict(self.issue, body=self.issue["body"].replace("Implementation", "Read-only", 1))
         comment = {"id": 7, "body": "### Work result\n\nFindings and evidence.", "user": {"login": "reviewer"}}
         data, blockers = assessment(self.repo, 3, issue, [], [comment])
         self.assertEqual(blockers, [])

@@ -13,6 +13,36 @@ Run all unit tests using `python3 -m app.cli test`.
 
 Run `python3 -m app.cli test issue` to test the Work issue validator.
 
+## Work Issue format
+
+Use the native Work form or the identical Markdown body when creating Issues with a connector. Keep four top-level sections and two ordered subsections under Scope. Write concise restrictions under Constraints and intended work under Actions, without repeating Objective or Acceptance criteria.
+
+```markdown
+### Work type
+
+Implementation
+
+### Objective
+
+Describe the intended outcome.
+
+### Scope
+
+#### Constraints
+
+- State restrictions and exclusions.
+
+#### Actions
+
+- State the work to perform.
+
+### Acceptance criteria
+
+- State observable completion evidence.
+```
+
+Both Scope subsections must be non-empty, unique and in the order shown. Replace the form's placeholder bullets. The single validator (`python3 -m app.cli issue`) enforces this format for Issue events and downstream Work validation. No compatibility flags, alternate format, or historical migration.
+
 ## Work Unit pull requests
 
 Use `.github/pull_request_template.md`: `Work` (`Refs #<issue number>`), `Changes`, and `Verification`. The Work section must contain exactly one same-repository `Refs #<issue number>` reference. The required `pr-template` check fetches that Issue, rejects missing or PR targets, requires OPEN state, and reuses the Issue validator. Scope and semantic evidence remain separate contracts. Use `Refs`, not `Closes`, because one Work may have multiple Work Units.
@@ -41,7 +71,7 @@ Native GitHub UI/API merges can bypass this preflight while satisfying the rules
 
 ## Work completion contract
 
-A code Work may close as completed when its Issue contract is valid, at least one declared Work Unit has merged into this repository's main with valid PR metadata, and no declared Work Unit remains open. A closed-unmerged PR is discarded, not delivered; its disposition must be considered during acceptance review. No new Work IDs. The Issue Form requires Work type (Implementation or Read-only); legacy untyped records are interpreted as Implementation for historical reads, but opened, edited, or reopened Issues must supply the type.
+A code Work may close as completed when its Issue contract is valid, at least one declared Work Unit has merged into this repository's main with valid PR metadata, and no declared Work Unit remains open. A closed-unmerged PR is discarded, not delivered; its disposition must be considered during acceptance review. No new Work IDs. Every Work must use the canonical Issue format, including explicit Work type (Implementation or Read-only) and structured Scope. There is no legacy validation fallback. Closed historical records remain unchanged; correct a legacy Issue before reopening or using it in a new Work Unit.
 
 Membership is read from current canonical `Refs #N` lines in the PR's Work section (including malformed PRs with such lines); ordinary references elsewhere do not establish membership. All PR pages are scanned. Removing or changing the declaration can alter membership; historical linkage, reachability after reverts, and semantic verification are not proved by this check.
 

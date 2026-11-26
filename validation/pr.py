@@ -76,12 +76,12 @@ class ContractTests(unittest.TestCase):
                 work_number(body)
 
     def test_work_target(self):
-        issue = {"number": 12, "state": "open", "body": "### Objective\n\nX\n\n### Scope\n\nX only\n\n### Acceptance criteria\n\nX passes"}
+        issue = {"number": 12, "state": "open", "body": "### Work type\n\nImplementation\n\n### Objective\n\nX\n\n### Scope\n\n#### Constraints\n\n- X only\n\n#### Actions\n\n- Implement X\n\n### Acceptance criteria\n\nX passes"}
         self.assertEqual(work_errors(12, issue), [])
         for bad in (None, {}, dict(issue, number=13), dict(issue, state="closed"),
                     dict(issue, pull_request={}), dict(issue, body=""), dict(issue, body=None)):
             self.assertTrue(work_errors(12, bad))
 
     def test_read_only_target(self):
-        issue = {"number": 12, "state": "open", "body": "### Work type\n\nRead-only\n\n### Objective\n\nX\n\n### Scope\n\nX only\n\n### Acceptance criteria\n\nReport"}
+        issue = {"number": 12, "state": "open", "body": "### Work type\n\nRead-only\n\n### Objective\n\nX\n\n### Scope\n\n#### Constraints\n\n- X only\n\n#### Actions\n\n- Implement X\n\n### Acceptance criteria\n\nReport"}
         self.assertEqual(work_errors(12, issue), ["Read-only Work must not have a PR"])
