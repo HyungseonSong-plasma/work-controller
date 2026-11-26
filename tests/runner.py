@@ -33,7 +33,7 @@ FILES = {name: "validation." + name for name in ("issue", "pr", "approval", "com
 FILES.update({"cleanup": "controller.cleanup", "controller": "controller.decision_engine", "executor": "controller.executor",
               "operation": "controller.operation"})
 SCENARIOS = {
-    "cleanup": (cleanup_scenarios.CleanupTests,),
+    "cleanup": (cleanup_scenarios.CleanupTests, cleanup_scenarios.CleanupLifecycleTests),
     "approval": (approval_scenarios.ApprovalTests,),
     "completion": (completion_scenarios.CompletionTests,),
     "merge": (merge_scenarios.MergeTests,),
