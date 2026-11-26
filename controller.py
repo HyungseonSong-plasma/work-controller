@@ -4,15 +4,15 @@ import json
 import subprocess
 import sys
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 # Existing validators use sibling imports; import them through the validation path.
-from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent / "validation"))
 from validate_issue import validate as valid_issue
 from validate_completion import assessment, declared_works
 from validate_merge import REPO, api, digest, snapshot
-from validate_pr import errors as pr_errors, work_number
+from validate_pr import errors as pr_errors
 
 
 def pages(path):
@@ -44,7 +44,8 @@ def pr_action(repo, pr, issue, check_reader, detail_reader):
         return {"pr": number, "action": "CONTINUE_DRAFT"}
     fresh = detail_reader(repo, number)
     if (fresh.get("body") != pr.get("body") or fresh.get("state") != "open" or
-            fresh.get("head", {}).get("sha") != pr["head"]["sha"] or fresh.get("draft")):
+            fresh.get("head", {}).get("sha") != pr["head"]["sha"] or fresh.get("draft") or
+            fresh.get("base") != pr.get("base")):
         return {"pr": number, "action": "REFRESH_STATE"}
     data = snapshot(fresh, issue, repo, number)
     checks = check_reader(repo, number)
