@@ -1,0 +1,673 @@
+{
+  "version": 1,
+  "target": "controller.cleanup",
+  "cases": [
+    {
+      "name": "unchanged_branch",
+      "function": "branch_is_unchanged",
+      "args": [
+        {
+          "name": "test/one",
+          "protected": false,
+          "commit": {
+            "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          }
+        },
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "main",
+        [],
+        []
+      ],
+      "assert": {
+        "op": "true"
+      }
+    },
+    {
+      "name": "protected",
+      "function": "branch_is_unchanged",
+      "args": [
+        {
+          "name": "test/one",
+          "protected": true,
+          "commit": {
+            "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          }
+        },
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "main",
+        [],
+        []
+      ],
+      "assert": {
+        "op": "false"
+      }
+    },
+    {
+      "name": "default",
+      "function": "branch_is_unchanged",
+      "args": [
+        {
+          "name": "main",
+          "protected": false,
+          "commit": {
+            "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          }
+        },
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "main",
+        [],
+        []
+      ],
+      "assert": {
+        "op": "false"
+      }
+    },
+    {
+      "name": "stale",
+      "function": "branch_is_unchanged",
+      "args": [
+        {
+          "name": "test/one",
+          "protected": false,
+          "commit": {
+            "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          }
+        },
+        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "main",
+        [],
+        []
+      ],
+      "assert": {
+        "op": "false"
+      }
+    },
+    {
+      "name": "open_dependency",
+      "function": "branch_is_unchanged",
+      "args": [
+        {
+          "name": "test/one",
+          "protected": false,
+          "commit": {
+            "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          }
+        },
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "main",
+        [
+          "test/one"
+        ],
+        []
+      ],
+      "assert": {
+        "op": "false"
+      }
+    },
+    {
+      "name": "ruleset",
+      "function": "branch_is_unchanged",
+      "args": [
+        {
+          "name": "test/one",
+          "protected": false,
+          "commit": {
+            "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          }
+        },
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "main",
+        [],
+        [
+          {
+            "type": "deletion"
+          }
+        ]
+      ],
+      "assert": {
+        "op": "false"
+      }
+    },
+    {
+      "name": "unsafe_ref",
+      "function": "branch_is_unchanged",
+      "args": [
+        {
+          "name": "test/../one",
+          "protected": false,
+          "commit": {
+            "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          }
+        },
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "main",
+        [],
+        []
+      ],
+      "assert": {
+        "op": "false"
+      }
+    },
+    {
+      "name": "disposable_cancelled",
+      "function": "run_is_disposable",
+      "args": [
+        {
+          "path": ".github/workflows/pr-contract.yml",
+          "event": "pull_request",
+          "status": "completed",
+          "conclusion": "cancelled",
+          "run_attempt": 1
+        },
+        [
+          {
+            "status": "completed",
+            "conclusion": "cancelled",
+            "run_attempt": 1
+          }
+        ],
+        []
+      ],
+      "assert": {
+        "op": "true"
+      }
+    },
+    {
+      "name": "disposable_skipped",
+      "function": "run_is_disposable",
+      "args": [
+        {
+          "path": ".github/workflows/pr-contract.yml",
+          "event": "pull_request",
+          "status": "completed",
+          "conclusion": "skipped",
+          "run_attempt": 1
+        },
+        [
+          {
+            "status": "completed",
+            "conclusion": "skipped",
+            "run_attempt": 1
+          }
+        ],
+        []
+      ],
+      "assert": {
+        "op": "true"
+      }
+    },
+    {
+      "name": "review_history",
+      "function": "run_is_disposable",
+      "args": [
+        {
+          "path": ".github/workflows/review-execute.yml",
+          "event": "pull_request",
+          "status": "completed",
+          "conclusion": "cancelled",
+          "run_attempt": 1
+        },
+        [
+          {
+            "status": "completed",
+            "conclusion": "cancelled",
+            "run_attempt": 1
+          }
+        ],
+        []
+      ],
+      "assert": {
+        "op": "false"
+      }
+    },
+    {
+      "name": "preflight_history",
+      "function": "run_is_disposable",
+      "args": [
+        {
+          "path": ".github/workflows/review-preflight.yml",
+          "event": "pull_request",
+          "status": "completed",
+          "conclusion": "cancelled",
+          "run_attempt": 1
+        },
+        [
+          {
+            "status": "completed",
+            "conclusion": "cancelled",
+            "run_attempt": 1
+          }
+        ],
+        []
+      ],
+      "assert": {
+        "op": "false"
+      }
+    },
+    {
+      "name": "success_run",
+      "function": "run_is_disposable",
+      "args": [
+        {
+          "path": ".github/workflows/pr-contract.yml",
+          "event": "pull_request",
+          "status": "completed",
+          "conclusion": "success",
+          "run_attempt": 1
+        },
+        [
+          {
+            "status": "completed",
+            "conclusion": "cancelled",
+            "run_attempt": 1
+          }
+        ],
+        []
+      ],
+      "assert": {
+        "op": "false"
+      }
+    },
+    {
+      "name": "failed_run",
+      "function": "run_is_disposable",
+      "args": [
+        {
+          "path": ".github/workflows/pr-contract.yml",
+          "event": "pull_request",
+          "status": "completed",
+          "conclusion": "failure",
+          "run_attempt": 1
+        },
+        [
+          {
+            "status": "completed",
+            "conclusion": "cancelled",
+            "run_attempt": 1
+          }
+        ],
+        []
+      ],
+      "assert": {
+        "op": "false"
+      }
+    },
+    {
+      "name": "active_run",
+      "function": "run_is_disposable",
+      "args": [
+        {
+          "path": ".github/workflows/pr-contract.yml",
+          "event": "pull_request",
+          "status": "in_progress",
+          "conclusion": "cancelled",
+          "run_attempt": 1
+        },
+        [
+          {
+            "status": "completed",
+            "conclusion": "cancelled",
+            "run_attempt": 1
+          }
+        ],
+        []
+      ],
+      "assert": {
+        "op": "false"
+      }
+    },
+    {
+      "name": "rerun",
+      "function": "run_is_disposable",
+      "args": [
+        {
+          "path": ".github/workflows/pr-contract.yml",
+          "event": "pull_request",
+          "status": "completed",
+          "conclusion": "cancelled",
+          "run_attempt": 2
+        },
+        [
+          {
+            "status": "completed",
+            "conclusion": "cancelled",
+            "run_attempt": 1
+          }
+        ],
+        []
+      ],
+      "assert": {
+        "op": "false"
+      }
+    },
+    {
+      "name": "failed_job",
+      "function": "run_is_disposable",
+      "args": [
+        {
+          "path": ".github/workflows/pr-contract.yml",
+          "event": "pull_request",
+          "status": "completed",
+          "conclusion": "cancelled",
+          "run_attempt": 1
+        },
+        [
+          {
+            "status": "completed",
+            "conclusion": "failure",
+            "run_attempt": 1
+          }
+        ],
+        []
+      ],
+      "assert": {
+        "op": "false"
+      }
+    },
+    {
+      "name": "successful_job",
+      "function": "run_is_disposable",
+      "args": [
+        {
+          "path": ".github/workflows/pr-contract.yml",
+          "event": "pull_request",
+          "status": "completed",
+          "conclusion": "cancelled",
+          "run_attempt": 1
+        },
+        [
+          {
+            "status": "completed",
+            "conclusion": "success",
+            "run_attempt": 1
+          }
+        ],
+        []
+      ],
+      "assert": {
+        "op": "false"
+      }
+    },
+    {
+      "name": "previous_job",
+      "function": "run_is_disposable",
+      "args": [
+        {
+          "path": ".github/workflows/pr-contract.yml",
+          "event": "pull_request",
+          "status": "completed",
+          "conclusion": "cancelled",
+          "run_attempt": 1
+        },
+        [
+          {
+            "status": "completed",
+            "conclusion": "cancelled",
+            "run_attempt": 2
+          }
+        ],
+        []
+      ],
+      "assert": {
+        "op": "false"
+      }
+    },
+    {
+      "name": "artifact",
+      "function": "run_is_disposable",
+      "args": [
+        {
+          "path": ".github/workflows/pr-contract.yml",
+          "event": "pull_request",
+          "status": "completed",
+          "conclusion": "cancelled",
+          "run_attempt": 1
+        },
+        [
+          {
+            "status": "completed",
+            "conclusion": "cancelled",
+            "run_attempt": 1
+          }
+        ],
+        [
+          {
+            "id": 1
+          }
+        ]
+      ],
+      "assert": {
+        "op": "false"
+      }
+    },
+    {
+      "name": "no_jobs",
+      "function": "run_is_disposable",
+      "args": [
+        {
+          "path": ".github/workflows/pr-contract.yml",
+          "event": "pull_request",
+          "status": "completed",
+          "conclusion": "cancelled",
+          "run_attempt": 1
+        },
+        [],
+        []
+      ],
+      "assert": {
+        "op": "false"
+      }
+    },
+    {
+      "name": "issue_comment",
+      "function": "run_is_disposable",
+      "args": [
+        {
+          "path": ".github/workflows/pr-contract.yml",
+          "event": "issue_comment",
+          "status": "completed",
+          "conclusion": "cancelled",
+          "run_attempt": 1
+        },
+        [
+          {
+            "status": "completed",
+            "conclusion": "cancelled",
+            "run_attempt": 1
+          }
+        ],
+        []
+      ],
+      "assert": {
+        "op": "false"
+      }
+    },
+    {
+      "name": "evidence_link",
+      "function": "references_evidence",
+      "args": [
+        [
+          "https://github.com/example/test/actions/runs/12345/job/67890"
+        ],
+        [
+          12345,
+          67890
+        ]
+      ],
+      "assert": {
+        "op": "true"
+      }
+    },
+    {
+      "name": "not_same_number",
+      "function": "references_evidence",
+      "args": [
+        [
+          "run 123456"
+        ],
+        [
+          12345
+        ]
+      ],
+      "assert": {
+        "op": "false"
+      }
+    },
+    {
+      "name": "exact_relation",
+      "function": "associated",
+      "args": [
+        {
+          "head_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "head_branch": "test/one"
+        },
+        {
+          "number": 12,
+          "id": 34,
+          "head": {
+            "repo": {
+              "id": 1
+            },
+            "ref": "test/one",
+            "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "base": {
+            "repo": {
+              "id": 1
+            },
+            "ref": "main"
+          }
+        },
+        {
+          "number": 12,
+          "id": 34,
+          "head": {
+            "ref": "test/one",
+            "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          }
+        },
+        1
+      ],
+      "assert": {
+        "op": "true"
+      }
+    },
+    {
+      "name": "wrong_repository",
+      "function": "associated",
+      "args": [
+        {
+          "head_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "head_branch": "test/one"
+        },
+        {
+          "number": 12,
+          "id": 34,
+          "head": {
+            "repo": {
+              "id": 2
+            },
+            "ref": "test/one",
+            "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "base": {
+            "repo": {
+              "id": 1
+            },
+            "ref": "main"
+          }
+        },
+        {
+          "number": 12,
+          "id": 34,
+          "head": {
+            "ref": "test/one",
+            "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          }
+        },
+        1
+      ],
+      "assert": {
+        "op": "false"
+      }
+    },
+    {
+      "name": "wrong_pr",
+      "function": "associated",
+      "args": [
+        {
+          "head_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "head_branch": "test/one"
+        },
+        {
+          "number": 13,
+          "id": 34,
+          "head": {
+            "repo": {
+              "id": 1
+            },
+            "ref": "test/one",
+            "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "base": {
+            "repo": {
+              "id": 1
+            },
+            "ref": "main"
+          }
+        },
+        {
+          "number": 12,
+          "id": 34,
+          "head": {
+            "ref": "test/one",
+            "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          }
+        },
+        1
+      ],
+      "assert": {
+        "op": "false"
+      }
+    },
+    {
+      "name": "wrong_head",
+      "function": "associated",
+      "args": [
+        {
+          "head_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "head_branch": "test/one"
+        },
+        {
+          "number": 12,
+          "id": 34,
+          "head": {
+            "repo": {
+              "id": 1
+            },
+            "ref": "test/one",
+            "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "base": {
+            "repo": {
+              "id": 1
+            },
+            "ref": "main"
+          }
+        },
+        {
+          "number": 12,
+          "id": 34,
+          "head": {
+            "ref": "test/one",
+            "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          }
+        },
+        1
+      ],
+      "assert": {
+        "op": "false"
+      }
+    }
+  ]
+}

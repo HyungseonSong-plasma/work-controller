@@ -10,7 +10,7 @@ from validation import issue, pr, merge, completion, authority, approval
 from validation.model import REPO, SHA, api, digest
 from validation.merge import read_snapshot, verify
 from validation.completion import read_assessment, approved_close, guard_closed
-from controller import decision_engine, executor, operation, review
+from controller import cleanup, decision_engine, executor, operation, review
 from controller.decision_engine import discover
 
 
@@ -243,9 +243,18 @@ def review_command(argv):
     return int(result["state"] == "BLOCKED")
 
 
-COMMANDS = {"review": review_command, "operation": operation_command, "executor-live-ci": executor_live_ci_command, "executor": executor_command, "approval": approval_command, "authority": authority_command, "issue": issue_command, "pr": pr_command, "merge": merge_command,
+def cleanup_command(argv):
+    parser = argparse.ArgumentParser(prog="cleanup", description="Read-only manifest unless an approved digest is provided by trusted cleanup CI.")
+    parser.add_argument("--repo", required=True)
+    parser.add_argument("--kind", choices=("branches", "runs"), required=True)
+    parser.add_argument("--approved-manifest", help="Exact reviewed SHA-256; owner dispatch for history. Set POST_WORK_CLEANUP_SINCE to a UTC activation timestamp for future automatic cleanup.")
+    args = parser.parse_args(argv)
+    print(json.dumps(cleanup.run(args.repo, args.kind, args.approved_manifest), indent=2, ensure_ascii=False))
+
+
+COMMANDS = {"cleanup": cleanup_command, "review": review_command, "operation": operation_command, "executor-live-ci": executor_live_ci_command, "executor": executor_command, "approval": approval_command, "authority": authority_command, "issue": issue_command, "pr": pr_command, "merge": merge_command,
             "completion": completion_command, "controller": controller_command}
-MODULES = {"operation": operation, "executor": executor, "approval": approval, "authority": authority, "issue": issue, "pr": pr, "merge": merge, "completion": completion,
+MODULES = {"cleanup": cleanup, "operation": operation, "executor": executor, "approval": approval, "authority": authority, "issue": issue, "pr": pr, "merge": merge, "completion": completion,
            "controller": decision_engine}
 
 

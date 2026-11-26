@@ -1,0 +1,122 @@
+name: Post-work cleanup
+on:
+  pull_request_target:
+    types: [closed]
+    branches: [main]
+  issues:
+    types: [closed]
+  workflow_run:
+    workflows: [Review execute]
+    types: [completed]
+    branches: [main]
+  schedule:
+    - cron: '23 * * * *'
+  workflow_dispatch:
+    inputs:
+      branch_digest:
+        description: Reviewed branch manifest SHA-256 (blank = dry-run)
+        type: string
+        default: ''
+      run_digest:
+        description: Reviewed run manifest SHA-256 (blank = dry-run)
+        type: string
+        default: ''
+permissions: {}
+concurrency:
+  group: post-work-cleanup
+  cancel-in-progress: false
+jobs:
+  plan:
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' ||
+       (github.event_name == 'pull_request_target' && github.event.pull_request.merged == true) ||
+       (github.event_name == 'issues' && github.event.issue.state_reason == 'completed') ||
+       (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: read
+      actions: read
+      checks: read
+      statuses: read
+    outputs:
+      branch_digest: ${{ steps.plan.outputs.branch_digest }}
+      run_digest: ${{ steps.plan.outputs.run_digest }}
+      auto: ${{ steps.plan.outputs.auto }}
+      branches: ${{ steps.plan.outputs.branches }}
+      runs: ${{ steps.plan.outputs.runs }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: refs/heads/main
+          persist-credentials: false
+      - name: Inventory
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          POST_WORK_CLEANUP_SINCE: ${{ vars.POST_WORK_CLEANUP_SINCE }}
+        run: |
+          set -euo pipefail
+          for kind in branches runs; do
+            python3 -m app.cli cleanup --repo "$GITHUB_REPOSITORY" --kind "$kind" | tee "$RUNNER_TEMP/$kind.json"
+          done
+          {
+            echo "branch_digest=$(jq -er .digest "$RUNNER_TEMP/branches.json")"
+            echo "run_digest=$(jq -er .digest "$RUNNER_TEMP/runs.json")"
+            echo "auto=$(jq -r .automatic "$RUNNER_TEMP/branches.json")"
+            echo "branches=$(jq '.manifest.targets | length' "$RUNNER_TEMP/branches.json")"
+            echo "runs=$(jq '.manifest.targets | length' "$RUNNER_TEMP/runs.json")"
+          } >> "$GITHUB_OUTPUT"
+  branches:
+    needs: plan
+    if: >-
+      (github.event_name == 'workflow_dispatch' && inputs.branch_digest != '') ||
+      (needs.plan.outputs.auto == 'true' && needs.plan.outputs.branches != '0')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      pull-requests: read
+      issues: read
+      actions: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: refs/heads/main
+          persist-credentials: false
+      - name: Revalidate and delete exact refs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          POST_WORK_CLEANUP_SINCE: ${{ vars.POST_WORK_CLEANUP_SINCE }}
+          DIGEST: ${{ github.event_name == 'workflow_dispatch' && inputs.branch_digest || needs.plan.outputs.branch_digest }}
+        run: python3 -m app.cli cleanup --repo "$GITHUB_REPOSITORY" --kind branches --approved-manifest "$DIGEST"
+  runs:
+    needs: [plan, branches]
+    if: >-
+      always() && needs.plan.result == 'success' &&
+      (needs.branches.result == 'success' || needs.branches.result == 'skipped') &&
+      ((github.event_name == 'workflow_dispatch' && inputs.run_digest != '') ||
+       (needs.plan.outputs.auto == 'true' && needs.plan.outputs.runs != '0'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: read
+      actions: write
+      checks: read
+      statuses: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: refs/heads/main
+          persist-credentials: false
+      - name: Revalidate and delete disposable runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          POST_WORK_CLEANUP_SINCE: ${{ vars.POST_WORK_CLEANUP_SINCE }}
+          DIGEST: ${{ github.event_name == 'workflow_dispatch' && inputs.run_digest || needs.plan.outputs.run_digest }}
+        run: python3 -m app.cli cleanup --repo "$GITHUB_REPOSITORY" --kind runs --approved-manifest "$DIGEST"
