@@ -5,6 +5,7 @@ on:
 permissions:
   contents: read
   pull-requests: read
+  issues: read
 concurrency:
   group: pr-template-${{ github.event.pull_request.number }}
   cancel-in-progress: true
@@ -18,6 +19,7 @@ jobs:
           persist-credentials: false
       - name: Test validator
         run: python3 validation/validate_pr.py --test
+      - run: python3 validation/validate_issue.py --test
       - name: Validate current pull request
         env:
           GH_TOKEN: ${{ github.token }}
@@ -25,4 +27,6 @@ jobs:
         run: |
           set -euo pipefail
           gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq '.body // ""' > "$RUNNER_TEMP/pr-body.md"
-          python3 validation/validate_pr.py < "$RUNNER_TEMP/pr-body.md"
+          WORK_NUMBER=$(python3 validation/validate_pr.py --work-number < "$RUNNER_TEMP/pr-body.md")
+          gh api "repos/$GITHUB_REPOSITORY/issues/$WORK_NUMBER" > "$RUNNER_TEMP/work.json"
+          python3 validation/validate_pr.py --issue-json "$WORK_NUMBER" < "$RUNNER_TEMP/work.json"
