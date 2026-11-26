@@ -38,12 +38,95 @@ class CleanupTests(unittest.TestCase):
             self.assertEqual(api.call_count, 2)
 
     def test_counted_duplicate(self):
-        with patch.object(cleanup, "api", return_value=[{"total_count": 2, "jobs": [{"id": 1}, {"id": 1}]}]) as api, \
-                patch.object(cleanup.time, "sleep") as sleep:
-            with self.assertRaisesRegex(ValueError, "Duplicate"):
+        pages = [{"total_count": 2, "jobs": [{"id": 1}]},
+                 {"total_count": 2, "jobs": [{"id": 1}]}]
+        with patch.object(cleanup, "api", return_value=pages) as api, \
+                patch.object(cleanup.time, "sleep") as sleep, patch("builtins.print") as log:
+            with self.assertRaisesRegex(ValueError, r"Duplicate.*duplicate_ids=\[1\].*attempt=3/3"):
                 cleanup.counted("example", "jobs")
-            api.assert_called_once()
-            sleep.assert_not_called()
+            self.assertEqual(api.call_count, 3)
+            self.assertEqual([c.args for c in sleep.call_args_list], [(1,), (2,)])
+            self.assertIn("endpoint=example, field=jobs", log.call_args.args[0])
+
+    def test_counted_duplicate_recovers_without_old_pages(self):
+        old = [{"total_count": 2, "jobs": [{"id": 99}, {"id": 99}]}]
+        new = [{"total_count": 1, "jobs": [{"id": 2}]}]
+        with patch.object(cleanup, "api", side_effect=[old, new]) as api, \
+                patch.object(cleanup.time, "sleep") as sleep, patch("builtins.print"):
+            self.assertEqual(cleanup.counted("example", "jobs"), [{"id": 2}])
+            self.assertEqual(api.call_count, 2)
+            sleep.assert_called_once_with(1)
+
+    def test_listed_duplicate_recovers_and_exhausts(self):
+        old = [[{"name": "old"}], [{"name": "old"}]]
+        new = [[{"name": "fresh"}]]
+        with patch.object(cleanup, "api", side_effect=[old, new]) as api, \
+                patch.object(cleanup.time, "sleep") as sleep, patch("builtins.print") as log:
+            self.assertEqual(cleanup.listed("branches", "name"), [{"name": "fresh"}])
+            self.assertEqual(api.call_count, 2)
+            sleep.assert_called_once_with(1)
+            self.assertIn("page_counts=[1, 1]", log.call_args.args[0])
+        with patch.object(cleanup, "api", return_value=old) as api, \
+                patch.object(cleanup.time, "sleep"), patch("builtins.print"):
+            with self.assertRaisesRegex(ValueError, "Duplicate.*endpoint=branches.*attempt=3/3"):
+                cleanup.listed("branches", "name")
+            self.assertEqual(api.call_count, 3)
+
+    def test_malformed_identities_do_not_retry(self):
+        for value in (True, 0, -1, None, "1", [], {}):
+            with self.subTest(value=value), patch.object(cleanup, "api", return_value=[
+                    {"total_count": 2, "jobs": [{"id": 1}, {"id": value}]}]) as api, \
+                    patch.object(cleanup.time, "sleep") as sleep:
+                with self.assertRaisesRegex(ValueError, "Invalid enumeration identity"):
+                    cleanup.counted("example", "jobs")
+                api.assert_called_once()
+                sleep.assert_not_called()
+        for value in ("", None, 1, []):
+            with self.subTest(name=value), patch.object(cleanup, "api", return_value=[[{"name": value}]]) as api, \
+                    patch.object(cleanup.time, "sleep") as sleep:
+                with self.assertRaisesRegex(ValueError, "Invalid enumeration identity"):
+                    cleanup.listed("branches", "name")
+                api.assert_called_once()
+                sleep.assert_not_called()
+
+    def test_terminal_status_overlap_restarts_all_queries(self):
+        ctx = {"root": "repos/example/test"}
+        with patch.object(cleanup, "counted", side_effect=[
+                [{"id": 99}], [{"id": 99}], [{"id": 2}], [{"id": 1}]]) as counted, \
+                patch.object(cleanup.time, "sleep") as sleep, patch("builtins.print") as log:
+            self.assertEqual(cleanup.terminal_runs(ctx), [{"id": 1}, {"id": 2}])
+            self.assertEqual([c.args[0] for c in counted.call_args_list], [
+                ctx["root"] + "/actions/runs?status=cancelled&per_page=100",
+                ctx["root"] + "/actions/runs?status=skipped&per_page=100"] * 2)
+            sleep.assert_called_once_with(1)
+            self.assertIn("terminal status counts=", log.call_args.args[0])
+
+    def test_duplicate_status_exhaustion_blocks_apply(self):
+        ctx = {"root": "repos/example/test"}
+        with patch.object(cleanup, "context", return_value=ctx), \
+                patch.object(cleanup, "catalog", return_value={}), \
+                patch.object(cleanup, "counted", return_value=[{"id": 1}]) as counted, \
+                patch.object(cleanup.time, "sleep"), patch("builtins.print"), \
+                patch.object(cleanup, "apply") as apply, \
+                patch.object(cleanup, "delete_run") as delete:
+            with self.assertRaisesRegex(ValueError, "Duplicate.*terminal status counts=.*attempt=3/3"):
+                cleanup.run("example/test", "runs", "a" * 64)
+            self.assertEqual(counted.call_count, 6)
+            apply.assert_not_called()
+            delete.assert_not_called()
+
+    def test_duplicate_listed_exhaustion_blocks_apply(self):
+        ctx = {"root": "repos/example/test"}
+        with patch.object(cleanup, "context", return_value=ctx), \
+                patch.object(cleanup, "api", return_value=[[{"number": 1}, {"number": 1}]]) as api, \
+                patch.object(cleanup.time, "sleep"), patch("builtins.print"), \
+                patch.object(cleanup, "apply") as apply, \
+                patch.object(cleanup, "delete_branch") as delete:
+            with self.assertRaisesRegex(ValueError, "Duplicate.*pulls.*attempt=3/3"):
+                cleanup.run("example/test", "branches", "a" * 64)
+            self.assertEqual(api.call_count, 3)
+            apply.assert_not_called()
+            delete.assert_not_called()
 
     def test_counted_malformed_no_retry(self):
         for pages in ([], [{"total_count": -1, "jobs": []}],
