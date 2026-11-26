@@ -6,7 +6,9 @@ from pathlib import Path
 import unittest
 
 from validation import issue, pr, merge
+from controller import executor
 from .scenarios import approval as approval_scenarios, completion as completion_scenarios, merge as merge_scenarios
+from .scenarios import controller as controller_scenarios, executor as executor_scenarios, operation as operation_scenarios
 from .model import TestClass
 
 TARGETS = {
@@ -16,12 +18,22 @@ TARGETS = {
     "validation.approval": {"evaluate_state": approval_scenarios.evaluate_state},
     "validation.completion": {"assessment_blockers": completion_scenarios.assessment_blockers},
     "validation.merge": {"snapshot": merge.snapshot},
+    "controller.decision_engine": {"first_action": controller_scenarios.first_action,
+                                   "orphan_action": controller_scenarios.orphan_action,
+                                   "orphan_number": controller_scenarios.orphan_number},
+    "controller.executor": {"validate_plan": executor.validate_plan, "tree_entries": executor.tree_entries},
+    "controller.operation": {"identity_case": operation_scenarios.identity_case},
 }
 FILES = {name: "validation." + name for name in ("issue", "pr", "approval", "completion", "merge")}
+FILES.update({"controller": "controller.decision_engine", "executor": "controller.executor",
+              "operation": "controller.operation"})
 SCENARIOS = {
-    "approval": approval_scenarios.ApprovalTests,
-    "completion": completion_scenarios.CompletionTests,
-    "merge": merge_scenarios.MergeTests,
+    "approval": (approval_scenarios.ApprovalTests,),
+    "completion": (completion_scenarios.CompletionTests,),
+    "merge": (merge_scenarios.MergeTests,),
+    "controller": (controller_scenarios.ControllerTests,),
+    "executor": (executor_scenarios.ExecutorTests,),
+    "operation": (operation_scenarios.OperationTests, operation_scenarios.CommentRequestTests),
 }
 EXCEPTIONS = {"ValueError": ValueError}
 CASE_DIR = Path(__file__).resolve().parent / "cases"
@@ -129,10 +141,14 @@ def load_suite(name):
     data = decode((CASE_DIR / (name + ".json")).read_text(encoding="utf-8"))
     suite = suite_from_data(data, target, name)
     if name in SCENARIOS:
-        scenarios = unittest.defaultTestLoader.loadTestsFromTestCase(SCENARIOS[name])
-        if not scenarios.countTestCases():
-            raise ValueError(f"Empty Python scenario suite: {name}")
-        suite.addTests(scenarios)
+        classes = SCENARIOS[name]
+        if not classes:
+            raise ValueError(f"Empty Python scenario registration: {name}")
+        for cls in classes:
+            scenarios = unittest.defaultTestLoader.loadTestsFromTestCase(cls)
+            if not scenarios.countTestCases():
+                raise ValueError(f"Empty Python scenario suite: {name}/{cls.__name__}")
+            suite.addTests(scenarios)
     return suite
 
 
@@ -248,7 +264,7 @@ class WrapperTests(unittest.TestCase):
 
     def test_empty_scenario_rejected(self):
         from unittest.mock import patch
-        with patch.dict(SCENARIOS, {"approval": unittest.TestCase}):
+        with patch.dict(SCENARIOS, {"approval": (unittest.TestCase,)}):
             with self.assertRaises(ValueError):
                 load_suite("approval")
 
@@ -257,3 +273,40 @@ class WrapperTests(unittest.TestCase):
         with patch("pathlib.Path.read_text", return_value='{"version":1,"target":"validation.merge","cases":[]}'):
             with self.assertRaises(ValueError):
                 load_suite("merge")
+
+    def test_controller_selectors(self):
+        import contextlib
+        import io
+        from app.cli import main
+        for name, json_count, scenario_count in (("controller", 15, 4),
+                                                  ("executor", 10, 4),
+                                                  ("operation", 18, 5)):
+            with self.subTest(name=name):
+                suite = load_suite(name)
+                cases = list(suite)
+                actual_json = sum(type(t).__module__ == "tests." + name for t in cases)
+                self.assertGreaterEqual(actual_json, json_count)
+                scenarios = [t for t in cases if isinstance(t, unittest.TestSuite)]
+                actual_scenarios = sum(t.countTestCases() for t in scenarios)
+                self.assertGreaterEqual(actual_scenarios, scenario_count)
+                self.assertEqual(suite.countTestCases(), actual_json + actual_scenarios)
+                if name == "operation":
+                    self.assertEqual({type(t).__name__ for s in scenarios for t in s},
+                                     {"OperationTests", "CommentRequestTests"})
+                with contextlib.redirect_stderr(io.StringIO()) as output:
+                    self.assertEqual(main(["test", name]), 0, output.getvalue())
+                self.assertIn(f"Ran {actual_json + actual_scenarios} tests", output.getvalue())
+
+    def test_controller_failure_propagation(self):
+        import contextlib
+        import io
+        from unittest.mock import patch
+        from app.cli import main
+        bad = {"version": 1, "target": "controller.executor", "cases": [
+            {"name": "wrong_expected", "function": "validate_plan",
+             "args": [{"title": "Change", "body": "### Work\n\nRefs #4\n\n### Changes\n\nX\n\n### Verification\n\nTests pass",
+                       "files": [{"path": "README.md", "content": "new"}]}, 4],
+             "assert": {"op": "equal", "value": ["different.txt"]}}]}
+        with patch("pathlib.Path.read_text", return_value=json.dumps(bad)), contextlib.redirect_stderr(io.StringIO()) as output:
+            self.assertEqual(main(["test", "executor"]), 1)
+        self.assertIn("FAIL: test_wrong_expected", output.getvalue())

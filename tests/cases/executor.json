@@ -1,0 +1,241 @@
+{
+  "version": 1,
+  "target": "controller.executor",
+  "cases": [
+    {
+      "name": "invalid_path_1",
+      "function": "validate_plan",
+      "args": [
+        {
+          "title": "Change",
+          "body": "### Work\n\nRefs #4\n\n### Changes\n\nX\n\n### Verification\n\nTests pass",
+          "files": [
+            {
+              "path": "../x",
+              "content": "new"
+            }
+          ]
+        },
+        4
+      ],
+      "assert": {
+        "op": "raises",
+        "exception": "ValueError"
+      }
+    },
+    {
+      "name": "invalid_path_2",
+      "function": "validate_plan",
+      "args": [
+        {
+          "title": "Change",
+          "body": "### Work\n\nRefs #4\n\n### Changes\n\nX\n\n### Verification\n\nTests pass",
+          "files": [
+            {
+              "path": ".git/config",
+              "content": "new"
+            }
+          ]
+        },
+        4
+      ],
+      "assert": {
+        "op": "raises",
+        "exception": "ValueError"
+      }
+    },
+    {
+      "name": "invalid_path_3",
+      "function": "validate_plan",
+      "args": [
+        {
+          "title": "Change",
+          "body": "### Work\n\nRefs #4\n\n### Changes\n\nX\n\n### Verification\n\nTests pass",
+          "files": [
+            {
+              "path": "a//b",
+              "content": "new"
+            }
+          ]
+        },
+        4
+      ],
+      "assert": {
+        "op": "raises",
+        "exception": "ValueError"
+      }
+    },
+    {
+      "name": "invalid_path_4",
+      "function": "validate_plan",
+      "args": [
+        {
+          "title": "Change",
+          "body": "### Work\n\nRefs #4\n\n### Changes\n\nX\n\n### Verification\n\nTests pass",
+          "files": [
+            {
+              "path": "/file",
+              "content": "new"
+            }
+          ]
+        },
+        4
+      ],
+      "assert": {
+        "op": "raises",
+        "exception": "ValueError"
+      }
+    },
+    {
+      "name": "invalid_path_5",
+      "function": "validate_plan",
+      "args": [
+        {
+          "title": "Change",
+          "body": "### Work\n\nRefs #4\n\n### Changes\n\nX\n\n### Verification\n\nTests pass",
+          "files": [
+            {
+              "path": "x\ny",
+              "content": "new"
+            }
+          ]
+        },
+        4
+      ],
+      "assert": {
+        "op": "raises",
+        "exception": "ValueError"
+      }
+    },
+    {
+      "name": "delete_missing",
+      "function": "tree_entries",
+      "args": [
+        {
+          "title": "Change",
+          "body": "### Work\n\nRefs #4\n\n### Changes\n\nX\n\n### Verification\n\nTests pass",
+          "files": [
+            {
+              "path": "README.md",
+              "content": null
+            }
+          ]
+        },
+        {
+          "truncated": false,
+          "tree": []
+        }
+      ],
+      "assert": {
+        "op": "raises",
+        "exception": "ValueError"
+      }
+    },
+    {
+      "name": "unchanged_blob",
+      "function": "tree_entries",
+      "args": [
+        {
+          "title": "Change",
+          "body": "### Work\n\nRefs #4\n\n### Changes\n\nX\n\n### Verification\n\nTests pass",
+          "files": [
+            {
+              "path": "README.md",
+              "content": "same"
+            }
+          ]
+        },
+        {
+          "truncated": false,
+          "tree": [
+            {
+              "path": "README.md",
+              "mode": "100644",
+              "type": "blob",
+              "sha": "5a66c000ab56fb7018b5ec24cdb24c94c00e2142"
+            }
+          ]
+        }
+      ],
+      "assert": {
+        "op": "raises",
+        "exception": "ValueError"
+      }
+    },
+    {
+      "name": "truncated_tree",
+      "function": "tree_entries",
+      "args": [
+        {
+          "title": "Change",
+          "body": "### Work\n\nRefs #4\n\n### Changes\n\nX\n\n### Verification\n\nTests pass",
+          "files": [
+            {
+              "path": "README.md",
+              "content": "new"
+            }
+          ]
+        },
+        {
+          "truncated": true,
+          "tree": []
+        }
+      ],
+      "assert": {
+        "op": "raises",
+        "exception": "ValueError"
+      }
+    },
+    {
+      "name": "symlink_ancestor",
+      "function": "tree_entries",
+      "args": [
+        {
+          "title": "Change",
+          "body": "### Work\n\nRefs #4\n\n### Changes\n\nX\n\n### Verification\n\nTests pass",
+          "files": [
+            {
+              "path": "link/a",
+              "content": "new"
+            }
+          ]
+        },
+        {
+          "truncated": false,
+          "tree": [
+            {
+              "path": "link",
+              "type": "blob",
+              "mode": "120000"
+            }
+          ]
+        }
+      ],
+      "assert": {
+        "op": "raises",
+        "exception": "ValueError"
+      }
+    },
+    {
+      "name": "wrong_work",
+      "function": "validate_plan",
+      "args": [
+        {
+          "title": "Change",
+          "body": "### Work\n\nRefs #5\n\n### Changes\n\nX\n\n### Verification\n\nTests pass",
+          "files": [
+            {
+              "path": "README.md",
+              "content": "new"
+            }
+          ]
+        },
+        4
+      ],
+      "assert": {
+        "op": "raises",
+        "exception": "ValueError"
+      }
+    }
+  ]
+}

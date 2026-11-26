@@ -1,0 +1,470 @@
+{
+  "version": 1,
+  "target": "controller.operation",
+  "cases": [
+    {
+      "name": "identity_valid",
+      "function": "identity_case",
+      "args": [],
+      "assert": {
+        "op": "equal",
+        "value": {
+          "work": 4,
+          "comment": 51,
+          "run": 99,
+          "attempt": 1,
+          "base": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      }
+    },
+    {
+      "name": "invalid_event_1",
+      "function": "identity_case",
+      "args": [
+        {
+          "action": "edited",
+          "repository": {
+            "full_name": "owner/repo"
+          },
+          "issue": {
+            "number": 4,
+            "state": "open",
+            "body": "### Work type\n\nRead-only\n\n### Objective\n\nCheck X\n\n### Scope\n\n#### Constraints\n\n- Read only\n\n#### Actions\n\n- Check X\n\n### Acceptance criteria\n\n- Report"
+          },
+          "comment": {
+            "id": 51,
+            "user": {
+              "login": "owner",
+              "id": 12
+            },
+            "body": "/controller run",
+            "issue_url": "https://api.github.com/repos/owner/repo/issues/4",
+            "created_at": "2026-01-01T00:00:00Z",
+            "updated_at": "2026-01-01T00:00:00Z"
+          },
+          "sender": {
+            "login": "owner",
+            "id": 12
+          }
+        }
+      ],
+      "assert": {
+        "op": "raises",
+        "exception": "ValueError"
+      }
+    },
+    {
+      "name": "invalid_event_2",
+      "function": "identity_case",
+      "args": [
+        {
+          "action": "deleted",
+          "repository": {
+            "full_name": "owner/repo"
+          },
+          "issue": {
+            "number": 4,
+            "state": "open",
+            "body": "### Work type\n\nRead-only\n\n### Objective\n\nCheck X\n\n### Scope\n\n#### Constraints\n\n- Read only\n\n#### Actions\n\n- Check X\n\n### Acceptance criteria\n\n- Report"
+          },
+          "comment": {
+            "id": 51,
+            "user": {
+              "login": "owner",
+              "id": 12
+            },
+            "body": "/controller run",
+            "issue_url": "https://api.github.com/repos/owner/repo/issues/4",
+            "created_at": "2026-01-01T00:00:00Z",
+            "updated_at": "2026-01-01T00:00:00Z"
+          },
+          "sender": {
+            "login": "owner",
+            "id": 12
+          }
+        }
+      ],
+      "assert": {
+        "op": "raises",
+        "exception": "ValueError"
+      }
+    },
+    {
+      "name": "invalid_event_3",
+      "function": "identity_case",
+      "args": [
+        {
+          "action": "created",
+          "repository": {
+            "full_name": "other/repo"
+          },
+          "issue": {
+            "number": 4,
+            "state": "open",
+            "body": "### Work type\n\nRead-only\n\n### Objective\n\nCheck X\n\n### Scope\n\n#### Constraints\n\n- Read only\n\n#### Actions\n\n- Check X\n\n### Acceptance criteria\n\n- Report"
+          },
+          "comment": {
+            "id": 51,
+            "user": {
+              "login": "owner",
+              "id": 12
+            },
+            "body": "/controller run",
+            "issue_url": "https://api.github.com/repos/owner/repo/issues/4",
+            "created_at": "2026-01-01T00:00:00Z",
+            "updated_at": "2026-01-01T00:00:00Z"
+          },
+          "sender": {
+            "login": "owner",
+            "id": 12
+          }
+        }
+      ],
+      "assert": {
+        "op": "raises",
+        "exception": "ValueError"
+      }
+    },
+    {
+      "name": "invalid_event_4",
+      "function": "identity_case",
+      "args": [
+        {
+          "action": "created",
+          "repository": {
+            "full_name": "owner/repo"
+          },
+          "issue": {
+            "number": 4,
+            "state": "open",
+            "body": "### Work type\n\nRead-only\n\n### Objective\n\nCheck X\n\n### Scope\n\n#### Constraints\n\n- Read only\n\n#### Actions\n\n- Check X\n\n### Acceptance criteria\n\n- Report"
+          },
+          "comment": {
+            "id": 51,
+            "user": {
+              "login": "owner",
+              "id": 12
+            },
+            "body": "/controller run",
+            "issue_url": "https://api.github.com/repos/owner/repo/issues/4",
+            "created_at": "2026-01-01T00:00:00Z",
+            "updated_at": "2026-01-01T00:00:00Z"
+          },
+          "sender": {
+            "login": "other"
+          }
+        }
+      ],
+      "assert": {
+        "op": "raises",
+        "exception": "ValueError"
+      }
+    },
+    {
+      "name": "invalid_event_5",
+      "function": "identity_case",
+      "args": [
+        {
+          "action": "created",
+          "repository": {
+            "full_name": "owner/repo"
+          },
+          "issue": {
+            "number": 4,
+            "state": "open",
+            "body": "### Work type\n\nRead-only\n\n### Objective\n\nCheck X\n\n### Scope\n\n#### Constraints\n\n- Read only\n\n#### Actions\n\n- Check X\n\n### Acceptance criteria\n\n- Report",
+            "pull_request": {}
+          },
+          "comment": {
+            "id": 51,
+            "user": {
+              "login": "owner",
+              "id": 12
+            },
+            "body": "/controller run",
+            "issue_url": "https://api.github.com/repos/owner/repo/issues/4",
+            "created_at": "2026-01-01T00:00:00Z",
+            "updated_at": "2026-01-01T00:00:00Z"
+          },
+          "sender": {
+            "login": "owner",
+            "id": 12
+          }
+        }
+      ],
+      "assert": {
+        "op": "raises",
+        "exception": "ValueError"
+      }
+    },
+    {
+      "name": "invalid_event_6",
+      "function": "identity_case",
+      "args": [
+        {
+          "action": "created",
+          "repository": {
+            "full_name": "owner/repo"
+          },
+          "issue": {
+            "number": 4,
+            "state": "open",
+            "body": "### Work type\n\nRead-only\n\n### Objective\n\nCheck X\n\n### Scope\n\n#### Constraints\n\n- Read only\n\n#### Actions\n\n- Check X\n\n### Acceptance criteria\n\n- Report"
+          },
+          "comment": {
+            "id": 51,
+            "user": {
+              "login": "owner",
+              "id": 12
+            },
+            "body": "/CONTROLLER RUN",
+            "issue_url": "https://api.github.com/repos/owner/repo/issues/4",
+            "created_at": "2026-01-01T00:00:00Z",
+            "updated_at": "2026-01-01T00:00:00Z"
+          },
+          "sender": {
+            "login": "owner",
+            "id": 12
+          }
+        }
+      ],
+      "assert": {
+        "op": "raises",
+        "exception": "ValueError"
+      }
+    },
+    {
+      "name": "invalid_event_7",
+      "function": "identity_case",
+      "args": [
+        {
+          "action": "created",
+          "repository": {
+            "full_name": "owner/repo"
+          },
+          "issue": {
+            "number": 4,
+            "state": "open",
+            "body": "### Work type\n\nRead-only\n\n### Objective\n\nCheck X\n\n### Scope\n\n#### Constraints\n\n- Read only\n\n#### Actions\n\n- Check X\n\n### Acceptance criteria\n\n- Report"
+          },
+          "comment": {
+            "id": 51,
+            "user": {
+              "login": "owner",
+              "id": 12
+            },
+            "body": "ordinary comment",
+            "issue_url": "https://api.github.com/repos/owner/repo/issues/4",
+            "created_at": "2026-01-01T00:00:00Z",
+            "updated_at": "2026-01-01T00:00:00Z"
+          },
+          "sender": {
+            "login": "owner",
+            "id": 12
+          }
+        }
+      ],
+      "assert": {
+        "op": "raises",
+        "exception": "ValueError"
+      }
+    },
+    {
+      "name": "invalid_event_8",
+      "function": "identity_case",
+      "args": [
+        {
+          "action": "created",
+          "repository": {
+            "full_name": "owner/repo"
+          },
+          "issue": {
+            "number": 4,
+            "state": "open",
+            "body": "### Work type\n\nRead-only\n\n### Objective\n\nCheck X\n\n### Scope\n\n#### Constraints\n\n- Read only\n\n#### Actions\n\n- Check X\n\n### Acceptance criteria\n\n- Report"
+          },
+          "comment": {
+            "id": 51,
+            "user": {
+              "login": "owner",
+              "id": 12
+            },
+            "body": "/controller run",
+            "issue_url": "https://api.github.com/repos/owner/repo/issues/4",
+            "created_at": "2026-01-01T00:00:00Z",
+            "updated_at": "later"
+          },
+          "sender": {
+            "login": "owner",
+            "id": 12
+          }
+        }
+      ],
+      "assert": {
+        "op": "raises",
+        "exception": "ValueError"
+      }
+    },
+    {
+      "name": "invalid_actor",
+      "function": "identity_case",
+      "args": [],
+      "kwargs": {
+        "actor": "other"
+      },
+      "assert": {
+        "op": "raises",
+        "exception": "ValueError"
+      }
+    },
+    {
+      "name": "stale_issue_1",
+      "function": "identity_case",
+      "args": [],
+      "kwargs": {
+        "current_issue": {
+          "number": 4,
+          "state": "closed",
+          "body": "### Work type\n\nRead-only\n\n### Objective\n\nCheck X\n\n### Scope\n\n#### Constraints\n\n- Read only\n\n#### Actions\n\n- Check X\n\n### Acceptance criteria\n\n- Report"
+        }
+      },
+      "assert": {
+        "op": "raises",
+        "exception": "ValueError"
+      }
+    },
+    {
+      "name": "stale_issue_2",
+      "function": "identity_case",
+      "args": [],
+      "kwargs": {
+        "current_issue": {
+          "number": 4,
+          "state": "open",
+          "body": "bad"
+        }
+      },
+      "assert": {
+        "op": "raises",
+        "exception": "ValueError"
+      }
+    },
+    {
+      "name": "stale_issue_3",
+      "function": "identity_case",
+      "args": [],
+      "kwargs": {
+        "current_issue": {
+          "number": 4,
+          "state": "open",
+          "body": "### Work type\n\nRead-only\n\n### Objective\n\nCheck X\n\n### Scope\n\n#### Constraints\n\n- Read only\n\n#### Actions\n\n- Check X\n\n### Acceptance criteria\n\n- Report",
+          "pull_request": {}
+        }
+      },
+      "assert": {
+        "op": "raises",
+        "exception": "ValueError"
+      }
+    },
+    {
+      "name": "stale_comment_1",
+      "function": "identity_case",
+      "args": [],
+      "kwargs": {
+        "current_comment": {
+          "id": 51,
+          "user": {
+            "login": "owner",
+            "id": 12
+          },
+          "body": "changed",
+          "issue_url": "https://api.github.com/repos/owner/repo/issues/4",
+          "created_at": "2026-01-01T00:00:00Z",
+          "updated_at": "2026-01-01T00:00:00Z"
+        }
+      },
+      "assert": {
+        "op": "raises",
+        "exception": "ValueError"
+      }
+    },
+    {
+      "name": "stale_comment_2",
+      "function": "identity_case",
+      "args": [],
+      "kwargs": {
+        "current_comment": {
+          "id": 51,
+          "user": {
+            "login": "owner",
+            "id": 12
+          },
+          "body": "/controller run",
+          "issue_url": "https://api.github.com/repos/owner/repo/issues/4",
+          "created_at": "2026-01-01T00:00:00Z",
+          "updated_at": "later"
+        }
+      },
+      "assert": {
+        "op": "raises",
+        "exception": "ValueError"
+      }
+    },
+    {
+      "name": "stale_comment_3",
+      "function": "identity_case",
+      "args": [],
+      "kwargs": {
+        "current_comment": {
+          "id": 51,
+          "user": {
+            "login": "owner",
+            "id": 12
+          },
+          "body": "/controller run",
+          "issue_url": "https://api.github.com/repos/owner/repo/issues/7",
+          "created_at": "2026-01-01T00:00:00Z",
+          "updated_at": "2026-01-01T00:00:00Z"
+        }
+      },
+      "assert": {
+        "op": "raises",
+        "exception": "ValueError"
+      }
+    },
+    {
+      "name": "stale_comment_4",
+      "function": "identity_case",
+      "args": [],
+      "kwargs": {
+        "current_comment": {
+          "id": 51,
+          "user": {
+            "login": "other",
+            "id": 12
+          },
+          "body": "/controller run",
+          "issue_url": "https://api.github.com/repos/owner/repo/issues/4",
+          "created_at": "2026-01-01T00:00:00Z",
+          "updated_at": "2026-01-01T00:00:00Z"
+        }
+      },
+      "assert": {
+        "op": "raises",
+        "exception": "ValueError"
+      }
+    },
+    {
+      "name": "stale_base",
+      "function": "identity_case",
+      "args": [],
+      "kwargs": {
+        "base": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      },
+      "assert": {
+        "op": "raises",
+        "exception": "ValueError"
+      }
+    }
+  ]
+}
