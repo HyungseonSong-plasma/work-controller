@@ -1,6 +1,7 @@
 """Unified CLI. Invoke from repository root: python3 -m app.cli."""
 import argparse
 import json
+import os
 import subprocess
 import sys
 import unittest
@@ -9,7 +10,7 @@ from validation import issue, pr, merge, completion, authority, approval
 from validation.model import REPO, SHA, api, digest
 from validation.merge import read_snapshot, verify
 from validation.completion import read_assessment, approved_close, guard_closed
-from controller import decision_engine, executor
+from controller import decision_engine, executor, operation
 from controller.decision_engine import discover
 
 
@@ -207,9 +208,36 @@ def executor_live_ci_command(argv):
     return 0
 
 
-COMMANDS = {"executor-live-ci": executor_live_ci_command, "executor": executor_command, "approval": approval_command, "authority": authority_command, "issue": issue_command, "pr": pr_command, "merge": merge_command,
+def operation_command(argv):
+    parser = argparse.ArgumentParser(prog="operation")
+    parser.add_argument("--repo", required=True)
+    parser.add_argument("--work", type=int)
+    parser.add_argument("--plan", help="Prepared JSON plan; - for stdin")
+    parser.add_argument("--execute", action="store_true")
+    parser.add_argument("--reviewed-plan")
+    parser.add_argument("--summary", action="store_true", help="Write GitHub Actions step summary")
+    args = parser.parse_args(argv)
+    if bool(args.plan) != (args.work is not None) or args.execute != bool(args.reviewed_plan) or (args.execute and not args.plan):
+        parser.error("Work and plan are paired; execute requires a reviewed plan digest")
+    plan = None
+    if args.plan == "-":
+        plan = json.load(sys.stdin)
+    elif args.plan:
+        with open(args.plan, encoding="utf-8") as stream:
+            plan = json.load(stream)
+    if args.plan and not isinstance(plan, dict):
+        parser.error("Plan must be a JSON object")
+    result = operation.run(args.repo, args.work, plan, args.execute, args.reviewed_plan)
+    print(json.dumps(result, indent=2, ensure_ascii=False))
+    if args.summary:
+        with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as stream:
+            stream.write(operation.summary(result))
+    return int(result["state"] not in {"REPORTED", "READY", "PUBLISHED"})
+
+
+COMMANDS = {"operation": operation_command, "executor-live-ci": executor_live_ci_command, "executor": executor_command, "approval": approval_command, "authority": authority_command, "issue": issue_command, "pr": pr_command, "merge": merge_command,
             "completion": completion_command, "controller": controller_command}
-MODULES = {"executor": executor, "approval": approval, "authority": authority, "issue": issue, "pr": pr, "merge": merge, "completion": completion,
+MODULES = {"operation": operation, "executor": executor, "approval": approval, "authority": authority, "issue": issue, "pr": pr, "merge": merge, "completion": completion,
            "controller": decision_engine}
 
 

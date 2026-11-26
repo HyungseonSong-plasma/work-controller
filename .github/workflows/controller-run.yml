@@ -1,0 +1,30 @@
+name: Controller run
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: controller-run
+  cancel-in-progress: false
+
+jobs:
+  operation:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+      checks: read
+      statuses: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Run read-only Controller operation
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 -m app.cli operation --repo "$GITHUB_REPOSITORY" --summary

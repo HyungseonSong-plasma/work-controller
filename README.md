@@ -150,3 +150,16 @@ Dry-run performs no writes. Explicit execution requires a fresh reviewed plan di
 ## Controller workflow convention
 
 Keep existing workflow filenames. Workflow YAML under `.github/workflows/` defines triggers, permissions, runner configuration and module invocation only for Controller workflows. Executor live CI is implemented in `controller/executor.py` and explicitly invoked by `python3 -m app.cli executor-live-ci` on trusted main via `executor-ci.yml` (workflow_dispatch). It creates and verifies one disposable C-only Work Unit and cleans up without merging; partial failures require human review. The repository must allow Actions to create pull requests. The test verifies publication, not downstream checks, which may be suppressed or require approval for token-created PRs. Ordinary `test executor` does not invoke live CI. Future `controller-run.yml` will invoke `controller/operation.py`; the operational contract and scheduling are not implemented by this refactor.
+
+## Controller Operation v0.1
+
+`controller/operation.py` connects one Decision Engine discovery cycle to the existing Executor, with no new approval or persistent state. The default is reporting only. The trusted-main `controller-run.yml` is manually dispatched and read-only; its job summary groups existing decisions by Action, Wait, and Human Review and links to Work or PR. A blocked Work does not suppress unrelated decisions. Global discovery failure stops dispatch. The summary is a view of the existing decision report, not another task database.
+
+```sh
+python3 -m app.cli operation --repo OWNER/REPO
+python3 -m app.cli operation --repo OWNER/REPO --work NUMBER --plan plan.json
+python3 -m app.cli operation --repo OWNER/REPO --work NUMBER --plan plan.json --execute --reviewed-plan DIGEST
+python3 -m app.cli test operation
+```
+
+Explicit plan dispatch requires exactly one current Implementation PLAN_WORK decision for the target Work and no ambiguous PR reference to it. Executor rechecks its existing authority and reviewed-plan contract; no plan is generated automatically. The manual workflow does not accept a plan and cannot publish changes. Scheduling, agent integration, existing PR modifications, automatic merge and closure are not implemented. No automatic retry after failure. A future Work may enable an hourly schedule or a separately authorized execution integration after the reporting cycle is verified.
