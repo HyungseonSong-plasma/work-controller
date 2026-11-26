@@ -153,20 +153,27 @@ def approval_command(argv):
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--pr", type=int)
     mode.add_argument("--work", type=int)
+    mode.add_argument("--refresh-work", type=int)
     parser.add_argument("--path", nargs="+")
-    parser.add_argument("--approved-change")
-    parser.add_argument("--user-response")
+    parser.add_argument("--request", action="store_true")
     parser.add_argument("--expected-head")
     parser.add_argument("--expected-base")
+    parser.add_argument("--target-url")
     args = parser.parse_args(argv)
     if not REPO.fullmatch(args.repo):
         parser.error("Expected owner/repo")
+    if args.refresh_work is not None:
+        if args.refresh_work < 1 or not args.expected_base or not SHA.fullmatch(args.expected_base) or not args.target_url or args.expected_head or args.path or args.request:
+            parser.error("Refresh requires Work, trusted base SHA and target URL")
+        output = approval.refresh_work(args.repo, args.refresh_work, args.expected_base, args.target_url)
+        print(json.dumps(output, indent=2, ensure_ascii=False))
+        return int(any(x.get("publish_error") for x in output))
     if args.work is not None:
-        if args.work < 1 or not args.path or not args.approved_change or not args.user_response or args.expected_head or args.expected_base:
-            parser.error("Recording requires --work, --path, --approved-change and --user-response")
-        result = approval.record(args.repo, args.work, args.path, args.approved_change, args.user_response)
+        if args.work < 1 or args.expected_head or args.expected_base or args.target_url or (args.request and not args.path):
+            parser.error("Work inspection or --request with --path")
+        result = approval.request(args.repo, args.work, args.path) if args.request else approval.inspect_work(args.repo, args.work, args.path)
     else:
-        if args.pr < 1 or args.path or args.approved_change or args.user_response or bool(args.expected_head) != bool(args.expected_base):
+        if args.pr < 1 or args.path or args.request or args.target_url or bool(args.expected_head) != bool(args.expected_base):
             parser.error("PR validation requires --pr and optionally both expected revisions")
         result = approval.inspect_pr(args.repo, args.pr, args.expected_head, args.expected_base)
     print(json.dumps(result, indent=2, ensure_ascii=False))

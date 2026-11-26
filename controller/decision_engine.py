@@ -9,6 +9,7 @@ from validation.completion import assessment, declared_works
 from validation.merge import snapshot
 from validation.model import api, digest, pages
 from validation.pr import errors as pr_errors
+from validation import approval
 
 
 def required_checks(repo, number):
@@ -60,7 +61,7 @@ def pr_action(repo, pr, issue, check_reader, detail_reader):
     return result
 
 
-def decide(repo, issues, pulls, check_reader, detail_reader, comment_reader=None):
+def decide(repo, issues, pulls, check_reader, detail_reader, comment_reader=None, approval_reader=None):
     works = {i["number"]: i for i in issues if "pull_request" not in i and i["state"] == "open"}
     report = {"repository": repo, "mode": "read-only", "works": [], "unassigned_prs": []}
     for pr in sorted(pulls, key=lambda p: p["number"]):
@@ -90,8 +91,30 @@ def decide(repo, issues, pulls, check_reader, detail_reader, comment_reader=None
             else:
                 item["actions"].append({"action": "REVIEW_COMPLETION", "review_digest": digest(data)})
         elif active:
+            actions = []
             for pr in sorted(active, key=lambda p: p["number"]):
-                item["actions"].append(pr_action(repo, pr, issue, check_reader, detail_reader))
+                try:
+                    if approval_reader:
+                        evidence = approval_reader(repo, number, pr["number"])
+                        if not evidence["allowed"]:
+                            actions.append({"pr": pr["number"], "action": {"PENDING": "WAIT_B_APPROVAL",
+                                            "REVOKED": "STOP_B_WORK"}.get(evidence["state"], "HUMAN_REVIEW"),
+                                            "reasons": [evidence["reason"]]})
+                            continue
+                    actions.append(pr_action(repo, pr, issue, check_reader, detail_reader))
+                except approval.ERRORS as exc:
+                    actions.append({"pr": pr["number"], "action": "HUMAN_REVIEW", "reasons": [str(exc)]})
+            blockers = [a for a in actions if a["action"] in {"HUMAN_REVIEW", "WAIT_B_APPROVAL", "STOP_B_WORK"}]
+            item["actions"] = blockers or actions
+        elif approval_reader and approval.labels(issue):
+            try:
+                evidence = approval_reader(repo, number, None)
+                if not evidence["allowed"]:
+                    item["actions"].append({"action": {"PENDING": "WAIT_B_APPROVAL", "REVOKED": "STOP_B_WORK"}.get(evidence["state"], "HUMAN_REVIEW"), "reasons": [evidence["reason"]]})
+                else:
+                    item["actions"].append({"action": "REVIEW_COMPLETION" if not blockers else "PLAN_WORK", "review_digest": digest(data)})
+            except approval.ERRORS as exc:
+                item["actions"].append({"action": "HUMAN_REVIEW", "reasons": [str(exc)]})
         elif not blockers:
             item["actions"].append({"action": "REVIEW_COMPLETION", "review_digest": digest(data)})
         elif any(u["status"] == "merged" for u in data["units"]):
@@ -106,7 +129,8 @@ def discover(repo):
     pulls = pages(f"repos/{repo}/pulls?state=all&per_page=100")
     return decide(repo, issues, pulls, required_checks,
                   lambda r, n: api(f"repos/{r}/pulls/{n}"),
-                  lambda r, n: pages(f"repos/{r}/issues/{n}/comments?per_page=100"))
+                  lambda r, n: pages(f"repos/{r}/issues/{n}/comments?per_page=100"),
+                  lambda r, w, p: approval.inspect_pr(r, p) if p else approval.inspect_work(r, w))
 
 
 class ControllerTests(unittest.TestCase):
@@ -165,3 +189,21 @@ class ControllerTests(unittest.TestCase):
         result = {"id": 7, "body": "### Work result\n\nEvidence"}
         self.assertEqual(run([], [result]), "REVIEW_COMPLETION")
         self.assertEqual(run([self.pr], [result]), "REVIEW_COMPLETION_BLOCKERS")
+
+    def test_approval_isolation(self):
+        other = dict(self.issue, number=3)
+        other_pr = dict(self.pr, number=4, body=self.pr["body"].replace("#1", "#3"))
+        for state, expected in (("HUMAN_REVIEW","HUMAN_REVIEW"),("PENDING","WAIT_B_APPROVAL"),("REVOKED","STOP_B_WORK")):
+            report = decide(self.repo, [self.issue,other], [self.pr,other_pr],
+                            lambda r,n:self.checks, lambda r,n:self.pr if n==2 else other_pr,
+                            approval_reader=lambda r,w,p: {"allowed":w==3,"state":state,"reason":"test"})
+            self.assertEqual(report["works"][0]["actions"][0]["action"], expected)
+            self.assertEqual(report["works"][1]["actions"][0]["action"], "REVIEW_MERGE")
+        def broken(r,w,p):
+            if w==1:
+                raise RuntimeError("approval API unavailable")
+            return {"allowed":True}
+        report = decide(self.repo,[self.issue,other],[self.pr,other_pr],lambda r,n:self.checks,
+                        lambda r,n:self.pr if n==2 else other_pr,approval_reader=broken)
+        self.assertEqual(report["works"][0]["actions"][0]["action"],"HUMAN_REVIEW")
+        self.assertEqual(report["works"][1]["actions"][0]["action"],"REVIEW_MERGE")
